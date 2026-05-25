@@ -1,4 +1,5 @@
-import { Outlet } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Outlet, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   AlertTriangle,
@@ -11,6 +12,7 @@ import {
   Calendar,
 } from "lucide-react";
 import { Sidebar, SidebarEntry } from "./Sidebar";
+import { MobileTopbar } from "./MobileTopbar";
 
 const items: SidebarEntry[] = [
   { to: "/resident", label: "Dashboard", icon: LayoutDashboard, end: true },
@@ -25,10 +27,23 @@ const items: SidebarEntry[] = [
 ];
 
 export function ResidentLayout() {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const location = useLocation();
+
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname]);
+
   return (
     <div className="flex min-h-screen">
-      <Sidebar items={items} title="Condómino" />
-      <main className="flex-1 overflow-y-auto bg-slate-50">
+      <Sidebar
+        items={items}
+        title="Condómino"
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+      />
+      <main className="flex-1 overflow-y-auto bg-slate-50 min-w-0">
+        <MobileTopbar title="Condómino" onMenuClick={() => setSidebarOpen(true)} />
         <Outlet />
       </main>
     </div>

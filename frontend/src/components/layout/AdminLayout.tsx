@@ -1,4 +1,5 @@
-import { Outlet } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Outlet, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   Users,
@@ -20,6 +21,7 @@ import {
   Fuel,
 } from "lucide-react";
 import { Sidebar, SidebarEntry } from "./Sidebar";
+import { MobileTopbar } from "./MobileTopbar";
 import { PanicAlertListener } from "../PanicAlertListener";
 
 const entries: SidebarEntry[] = [
@@ -55,10 +57,24 @@ const entries: SidebarEntry[] = [
 ];
 
 export function AdminLayout() {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const location = useLocation();
+
+  // Fechar sidebar quando o utilizador navega para outra página (mobile)
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname]);
+
   return (
     <div className="flex min-h-screen">
-      <Sidebar items={entries} title="Administrador" />
-      <main className="flex-1 overflow-y-auto bg-slate-50">
+      <Sidebar
+        items={entries}
+        title="Administrador"
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+      />
+      <main className="flex-1 overflow-y-auto bg-slate-50 min-w-0">
+        <MobileTopbar title="Administrador" onMenuClick={() => setSidebarOpen(true)} />
         <PanicAlertListener />
         <Outlet />
       </main>

@@ -5,10 +5,44 @@ import { Role, QRAccessType, AccessLogType, AccessMethod } from "@prisma/client"
 import { prisma } from "../prisma";
 import { authenticate, authorize } from "../middleware/auth";
 import { validateBody } from "../middleware/validate";
-import { signQR, verifyQR, generateQRImage } from "../utils/qr";
+import { signQR, verifyQR, generateQRImage, generateShortCode } from "../utils/qr";
+import { verifyAccessToken } from "../utils/jwt";
 import { emitToRole } from "../sockets";
 
 const router = Router();
+
+// ─────────────────────────────────────────────────────────────
+// GET /:id/image — DEVE ficar ANTES do middleware authenticate
+// porque <img src=""> não envia header Authorization.
+// Aceita o token via query string (?token=...) para mantermos segurança.
+// ─────────────────────────────────────────────────────────────
+router.get("/:id/image", async (req, res) => {
+  // Aceita token via query (?token=eyJ...) — usado pelas <img> tags
+  const token = (req.query.token as string) || (req.headers.authorization?.startsWith("Bearer ") ? req.headers.authorization.slice(7) : null);
+  if (!token) return res.status(401).json({ error: "Missing token" });
+
+  let payload;
+  try {
+    payload = verifyAccessToken(token);
+  } catch {
+    return res.status(401).json({ error: "Invalid token" });
+  }
+
+  const qr = await prisma.qRAccessCode.findUnique({ where: { id: req.params.id } });
+  if (!qr) return res.status(404).json({ error: "Not found" });
+
+  // Residente só pode ver os seus próprios QR
+  if (payload.role === Role.RESIDENT && qr.createdById !== payload.sub) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+
+  const png = await generateQRImage(qr.qrCodeData);
+  res.setHeader("Content-Type", "image/png");
+  res.setHeader("Cache-Control", "private, max-age=300");
+  res.send(png);
+});
+
+// A partir daqui todas as rotas exigem auth JWT no header
 router.use(authenticate);
 
 router.get("/", async (req, res) => {
@@ -52,6 +86,14 @@ router.post("/", validateBody(createSchema), async (req, res) => {
     expiresAt: body.validUntil,
   });
 
+  // Gera um shortCode único — em caso colisão (rara, ~1 em 30^6 ≈ 700M), tenta de novo
+  let shortCode = generateShortCode();
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const exists = await prisma.qRAccessCode.findUnique({ where: { shortCode } });
+    if (!exists) break;
+    shortCode = generateShortCode();
+  }
+
   const created = await prisma.qRAccessCode.create({
     data: {
       id,
@@ -65,6 +107,7 @@ router.post("/", validateBody(createSchema), async (req, res) => {
       validUntil: new Date(body.validUntil),
       maxUses: body.maxUses,
       qrCodeData,
+      shortCode,
       createdById: req.user!.sub,
       fractionId: req.user!.fractionId,
     },
@@ -87,40 +130,51 @@ router.put("/:id/deactivate", async (req, res) => {
   res.json(updated);
 });
 
-router.get("/:id/image", async (req, res) => {
-  const qr = await prisma.qRAccessCode.findUnique({ where: { id: req.params.id } });
-  if (!qr) return res.status(404).json({ error: "Not found" });
-  if (req.user!.role === Role.RESIDENT && qr.createdById !== req.user!.sub) {
-    return res.status(403).json({ error: "Forbidden" });
-  }
-  const png = await generateQRImage(qr.qrCodeData);
-  res.setHeader("Content-Type", "image/png");
-  res.send(png);
-});
-
-const validateSchema = z.object({
-  qrCodeData: z.string().min(1),
-});
+// ─────────────────────────────────────────────────────────────
+// Validação — aceita qrCodeData (do scan) OU shortCode (digitação)
+// ─────────────────────────────────────────────────────────────
+const validateSchema = z
+  .object({
+    qrCodeData: z.string().optional(),
+    shortCode: z.string().optional(),
+  })
+  .refine((d) => !!d.qrCodeData || !!d.shortCode, {
+    message: "qrCodeData ou shortCode obrigatório",
+  });
 
 router.post("/validate", authorize(Role.DOORMAN, Role.ADMIN), validateBody(validateSchema), async (req, res) => {
-  const { qrCodeData } = req.body as z.infer<typeof validateSchema>;
-  const payload = verifyQR(qrCodeData);
-  if (!payload) return res.status(400).json({ valid: false, reason: "Invalid signature" });
+  const { qrCodeData, shortCode } = req.body as z.infer<typeof validateSchema>;
+
+  let qrId: string | null = null;
+
+  if (qrCodeData) {
+    const payload = verifyQR(qrCodeData);
+    if (!payload) return res.status(400).json({ valid: false, reason: "QR Code inválido (assinatura)" });
+    qrId = payload.id;
+  } else if (shortCode) {
+    // Normalizar: upper case + remover espaços
+    const normalized = shortCode.trim().toUpperCase();
+    const qr = await prisma.qRAccessCode.findUnique({ where: { shortCode: normalized } });
+    if (!qr) return res.status(404).json({ valid: false, reason: "Código não encontrado" });
+    qrId = qr.id;
+  }
+
+  if (!qrId) return res.status(400).json({ valid: false, reason: "Nenhum código fornecido" });
 
   const qr = await prisma.qRAccessCode.findUnique({
-    where: { id: payload.id },
+    where: { id: qrId },
     include: {
       fraction: { include: { tower: true } },
       createdBy: { select: { id: true, name: true } },
     },
   });
-  if (!qr) return res.status(404).json({ valid: false, reason: "QR not found" });
+  if (!qr) return res.status(404).json({ valid: false, reason: "QR não encontrado" });
 
   const now = new Date();
-  if (!qr.isActive) return res.json({ valid: false, reason: "QR inactive", qr });
-  if (now < qr.validFrom) return res.json({ valid: false, reason: "QR not yet valid", qr });
-  if (now > qr.validUntil) return res.json({ valid: false, reason: "QR expired", qr });
-  if (qr.usedCount >= qr.maxUses) return res.json({ valid: false, reason: "QR usage exceeded", qr });
+  if (!qr.isActive) return res.json({ valid: false, reason: "Acesso desativado pelo residente", qr });
+  if (now < qr.validFrom) return res.json({ valid: false, reason: "Acesso ainda não válido", qr });
+  if (now > qr.validUntil) return res.json({ valid: false, reason: "Acesso expirado", qr });
+  if (qr.usedCount >= qr.maxUses) return res.json({ valid: false, reason: "Acesso já foi utilizado", qr });
 
   const log = await prisma.accessLog.create({
     data: {
@@ -129,9 +183,9 @@ router.post("/validate", authorize(Role.DOORMAN, Role.ADMIN), validateBody(valid
       personDocument: qr.guestDocument,
       fractionId: qr.fractionId,
       qrCodeId: qr.id,
-      method: AccessMethod.QR,
+      method: qrCodeData ? AccessMethod.QR : AccessMethod.MANUAL,
       registeredById: req.user!.sub,
-      notes: `Validado por QR — ${qr.type}`,
+      notes: `Validado por ${qrCodeData ? "QR Code" : "código manual"} — ${qr.type}`,
     },
     include: { fraction: { include: { tower: true } } },
   });

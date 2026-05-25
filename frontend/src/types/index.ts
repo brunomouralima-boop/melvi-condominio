@@ -110,6 +110,7 @@ export interface QRAccessCode {
   usedCount: number;
   isActive: boolean;
   qrCodeData: string;
+  shortCode?: string | null;
   fractionId: string;
   fraction?: Fraction;
   createdById: string;

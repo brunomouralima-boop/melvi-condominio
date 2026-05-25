@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Camera, UserPlus, CheckCircle2, XCircle, ScanLine } from "lucide-react";
+import { Camera, UserPlus, CheckCircle2, XCircle, ScanLine, KeyRound, ShieldAlert } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select } from "@/components/ui/input";
@@ -20,11 +20,23 @@ interface ValidateResult {
   log?: AccessLog;
 }
 
+/**
+ * Detecta se a câmara funciona neste contexto.
+ * getUserMedia exige HTTPS (excepto em localhost).
+ * Se estamos em http://IP, a câmara não vai funcionar.
+ */
+function isCameraSecureContext(): boolean {
+  if (typeof window === "undefined") return false;
+  // window.isSecureContext é true em HTTPS ou em localhost/127.0.0.1
+  return window.isSecureContext === true;
+}
+
 export function DoormanDashboard() {
   const qc = useQueryClient();
   const [scannerOpen, setScannerOpen] = useState(false);
   const [validating, setValidating] = useState(false);
   const [result, setResult] = useState<ValidateResult | null>(null);
+  const cameraAvailable = isCameraSecureContext();
 
   const { data: logs = [] } = useQuery({
     queryKey: ["access-logs", "today"],
@@ -43,33 +55,52 @@ export function DoormanDashboard() {
     qc.invalidateQueries({ queryKey: ["access-logs", "today"] });
   });
 
-  async function handleScan(qrCodeData: string) {
-    setScannerOpen(false);
+  async function validate(payload: { qrCodeData?: string; shortCode?: string }) {
     setValidating(true);
     try {
-      const { data } = await api.post<ValidateResult>("/qr-codes/validate", { qrCodeData });
+      const { data } = await api.post<ValidateResult>("/qr-codes/validate", payload);
       setResult(data);
       if (data.valid) {
         qc.invalidateQueries({ queryKey: ["access-logs", "today"] });
       }
     } catch (e: any) {
-      toast.error(e?.response?.data?.error || "Falha ao validar QR");
+      toast.error(e?.response?.data?.error || "Falha ao validar");
     } finally {
       setValidating(false);
     }
   }
 
+  function handleScan(qrCodeData: string) {
+    setScannerOpen(false);
+    validate({ qrCodeData });
+  }
+
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-display text-3xl font-bold text-brand-900">Controlo de Acesso</h1>
-          <p className="text-slate-600">Escaneie o QR Code do visitante ou registe manualmente</p>
-        </div>
+      <div>
+        <h1 className="font-display text-3xl font-bold text-brand-900">Controlo de Acesso</h1>
+        <p className="text-slate-600">Valide acessos por QR Code, código manual ou registo directo</p>
       </div>
 
+      {/* Aviso: câmara só funciona em HTTPS */}
+      {!cameraAvailable && (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="flex items-start gap-3 py-4">
+            <ShieldAlert className="h-5 w-5 text-amber-700 shrink-0 mt-0.5" />
+            <div className="text-sm text-amber-900">
+              <div className="font-semibold mb-0.5">Câmara não disponível neste contexto</div>
+              <div className="text-xs">
+                O scanner de QR Code requer HTTPS (cadeado verde). Está a aceder via HTTP simples, por isso o browser bloqueia o acesso à câmara.
+                Use a <strong>validação por código</strong> ou peça à administração para configurar HTTPS no servidor.
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-6 md:grid-cols-2">
-        <Card className="border-coral-200">
+        {/* CARD 1 — Scanner QR */}
+        <Card className={cameraAvailable ? "border-coral-200" : "opacity-60"}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-coral-700">
               <ScanLine className="h-6 w-6" />
@@ -85,27 +116,47 @@ export function DoormanDashboard() {
                 setResult(null);
                 setScannerOpen(true);
               }}
+              disabled={!cameraAvailable}
             >
               <Camera className="h-7 w-7" /> ESCANEAR QR CODE
             </Button>
             <p className="mt-2 text-xs text-slate-500 text-center">
-              Vai abrir a câmara — autorize quando solicitado pelo browser.
+              {cameraAvailable
+                ? "Vai abrir a câmara — autorize quando solicitado."
+                : "Indisponível em HTTP. Use código manual abaixo."}
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        {/* CARD 2 — Validar por código curto */}
+        <Card className="border-brand-200">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <UserPlus className="h-6 w-6 text-brand-700" />
-              Registo manual
+            <CardTitle className="flex items-center gap-2 text-brand-700">
+              <KeyRound className="h-6 w-6" />
+              Validar por código
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ManualEntryForm fractions={fractions} onCreated={() => qc.invalidateQueries({ queryKey: ["access-logs", "today"] })} />
+            <ShortCodeForm onSubmit={(code) => validate({ shortCode: code })} />
           </CardContent>
         </Card>
       </div>
+
+      {/* Registo manual de pessoa (não baseado em QR) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <UserPlus className="h-6 w-6 text-brand-700" />
+            Registo manual de entrada / saída
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ManualEntryForm
+            fractions={fractions}
+            onCreated={() => qc.invalidateQueries({ queryKey: ["access-logs", "today"] })}
+          />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -150,16 +201,18 @@ export function DoormanDashboard() {
         </CardContent>
       </Card>
 
+      {/* Scanner Dialog */}
       <Dialog open={scannerOpen} onOpenChange={setScannerOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Escanear QR Code</DialogTitle>
-            <DialogDescription>Aponte para o QR Code do visitante</DialogDescription>
+            <DialogDescription>Aponte a câmara para o QR Code do visitante</DialogDescription>
           </DialogHeader>
           <QRScanner onScan={handleScan} onClose={() => setScannerOpen(false)} />
         </DialogContent>
       </Dialog>
 
+      {/* Result Dialog */}
       <Dialog open={!!result} onOpenChange={() => setResult(null)}>
         <DialogContent>
           {result?.valid ? (
@@ -187,8 +240,16 @@ export function DoormanDashboard() {
                 <DialogTitle className="text-2xl text-coral-700">NEGADO</DialogTitle>
               </div>
               <div className="rounded-lg bg-coral-50 border border-coral-200 p-4 text-sm">
-                {result?.reason || "QR Code inválido"}
+                {result?.reason || "Acesso inválido"}
               </div>
+              {/* Se houver dados do QR (ex: expirado) mostra o que sabemos */}
+              {result?.qr && (
+                <div className="text-xs text-slate-500 border-t border-slate-200 pt-2">
+                  <div>{result.qr.guestName} · {result.qr.type}</div>
+                  <div>Válido de {formatDate(result.qr.validFrom)} até {formatDate(result.qr.validUntil)}</div>
+                  <div>Usos: {result.qr.usedCount}/{result.qr.maxUses}</div>
+                </div>
+              )}
               <DialogFooter>
                 <Button variant="outline" onClick={() => setResult(null)}>OK</Button>
               </DialogFooter>
@@ -199,10 +260,62 @@ export function DoormanDashboard() {
 
       {validating && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/50">
-          <Card><CardContent className="py-6">A validar…</CardContent></Card>
+          <Card>
+            <CardContent className="py-6">A validar…</CardContent>
+          </Card>
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Input específico para shortCode (6 chars).
+ * - Aceita só A-Z e 0-9
+ * - Auto-uppercase
+ * - Submete com Enter
+ */
+function ShortCodeForm({ onSubmit }: { onSubmit: (code: string) => void }) {
+  const [code, setCode] = useState("");
+
+  function normalize(input: string) {
+    return input.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+  }
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const normalized = code.trim();
+    if (normalized.length < 4) {
+      toast.error("Código demasiado curto");
+      return;
+    }
+    onSubmit(normalized);
+    setCode("");
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <div>
+        <Label>Código fornecido pelo visitante</Label>
+        <Input
+          type="text"
+          inputMode="text"
+          autoCapitalize="characters"
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
+          value={code}
+          onChange={(e) => setCode(normalize(e.target.value))}
+          placeholder="K3M9X2"
+          className="text-2xl font-mono tracking-[0.4em] text-center font-bold h-14"
+          maxLength={8}
+        />
+        <p className="text-xs text-slate-500 mt-1">6 caracteres. O código foi gerado pelo residente.</p>
+      </div>
+      <Button type="submit" size="lg" className="w-full" disabled={code.length < 4}>
+        <KeyRound className="h-5 w-5" /> Validar código
+      </Button>
+    </form>
   );
 }
 
@@ -232,21 +345,13 @@ function ManualEntryForm({ fractions, onCreated }: { fractions: Fraction[]; onCr
 
   return (
     <form onSubmit={submit} className="space-y-3">
-      <div>
-        <Label>Tipo</Label>
-        <Select value={type} onChange={(e) => setType(e.target.value as any)}>
-          <option value="ENTRY">Entrada</option>
-          <option value="EXIT">Saída</option>
-        </Select>
-      </div>
-      <div>
-        <Label>Nome *</Label>
-        <Input value={personName} onChange={(e) => setPersonName(e.target.value)} required />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid gap-3 md:grid-cols-2">
         <div>
-          <Label>Documento</Label>
-          <Input value={personDocument} onChange={(e) => setPersonDocument(e.target.value)} />
+          <Label>Tipo</Label>
+          <Select value={type} onChange={(e) => setType(e.target.value as any)}>
+            <option value="ENTRY">Entrada</option>
+            <option value="EXIT">Saída</option>
+          </Select>
         </div>
         <div>
           <Label>Fracção</Label>
@@ -257,6 +362,14 @@ function ManualEntryForm({ fractions, onCreated }: { fractions: Fraction[]; onCr
             ))}
           </Select>
         </div>
+      </div>
+      <div>
+        <Label>Nome *</Label>
+        <Input value={personName} onChange={(e) => setPersonName(e.target.value)} required />
+      </div>
+      <div>
+        <Label>Documento</Label>
+        <Input value={personDocument} onChange={(e) => setPersonDocument(e.target.value)} />
       </div>
       <div>
         <Label>Notas</Label>

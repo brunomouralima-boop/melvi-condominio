@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, QrCode, Eye, Power } from "lucide-react";
-import { api } from "@/lib/api";
+import { Plus, QrCode, Eye, Power, Copy, Check, KeyRound } from "lucide-react";
+import { api, tokenStore } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select } from "@/components/ui/input";
@@ -40,7 +40,7 @@ export function ResidentAccessCodes() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-3xl font-bold text-brand-900">Acessos QR</h1>
-          <p className="text-slate-500">Crie acessos temporários por QR Code</p>
+          <p className="text-slate-500">Crie acessos temporários por QR Code ou código curto</p>
         </div>
         <Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> Novo acesso</Button>
       </div>
@@ -68,6 +68,12 @@ export function ResidentAccessCodes() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-2 text-xs text-slate-600">
+                {q.shortCode && (
+                  <div className="rounded-lg bg-brand-50 border border-brand-200 p-2 text-center">
+                    <div className="text-[10px] uppercase tracking-wider text-brand-700 font-semibold">Código</div>
+                    <div className="font-mono text-lg font-bold text-brand-900 tracking-widest">{q.shortCode}</div>
+                  </div>
+                )}
                 {q.guestDocument && <div>Doc: {q.guestDocument}</div>}
                 {q.serviceType && <div>Serviço: {q.serviceType}</div>}
                 <div>Válido até: {formatDate(q.validUntil)}</div>
@@ -98,27 +104,111 @@ export function ResidentAccessCodes() {
 
       <NewAccessDialog open={open} onClose={() => setOpen(false)} onCreated={() => qc.invalidateQueries({ queryKey: ["my-qrs"] })} />
 
-      <Dialog open={!!viewing} onOpenChange={() => setViewing(null)}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>QR Code para {viewing?.guestName}</DialogTitle></DialogHeader>
-          {viewing && (
-            <div className="text-center space-y-3">
-              <img
-                src={`/api/qr-codes/${viewing.id}/image`}
-                alt="QR Code"
-                className="mx-auto w-72 h-72 border border-slate-200 rounded-lg"
-              />
-              <div className="text-sm">
-                <div className="font-semibold">{viewing.guestName}</div>
-                <div className="text-slate-500">Válido até {formatDate(viewing.validUntil)}</div>
-                <div className="text-slate-500">Usos: {viewing.usedCount}/{viewing.maxUses}</div>
-              </div>
-              <p className="text-xs text-slate-500">Mostre este código ao porteiro à entrada.</p>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <QRViewerDialog viewing={viewing} onClose={() => setViewing(null)} />
     </div>
+  );
+}
+
+/**
+ * Dialog que mostra QR + shortCode em destaque.
+ * Faz fetch da imagem PNG do backend com auth (token via query string).
+ */
+function QRViewerDialog({ viewing, onClose }: { viewing: QRAccessCode | null; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
+
+  // Fetch QR image as blob (the <img> tag can't send Authorization header,
+  // so we authenticate via ?token=... in the URL)
+  useEffect(() => {
+    if (!viewing) {
+      setImageUrl(null);
+      setImageError(null);
+      return;
+    }
+    const token = tokenStore.getAccess();
+    if (!token) {
+      setImageError("Sem sessão activa");
+      return;
+    }
+    const url = `/api/qr-codes/${viewing.id}/image?token=${encodeURIComponent(token)}`;
+    setImageUrl(url);
+    setImageError(null);
+  }, [viewing]);
+
+  function copyCode() {
+    if (!viewing?.shortCode) return;
+    navigator.clipboard
+      .writeText(viewing.shortCode)
+      .then(() => {
+        setCopied(true);
+        toast.success("Código copiado");
+        setTimeout(() => setCopied(false), 2000);
+      })
+      .catch(() => toast.error("Falha ao copiar"));
+  }
+
+  return (
+    <Dialog open={!!viewing} onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Acesso para {viewing?.guestName}</DialogTitle>
+        </DialogHeader>
+        {viewing && (
+          <div className="space-y-4">
+            {/* QR Code */}
+            <div className="text-center">
+              {imageUrl && !imageError ? (
+                <img
+                  src={imageUrl}
+                  alt="QR Code"
+                  className="mx-auto w-64 h-64 border border-slate-200 rounded-lg bg-white"
+                  onError={() => setImageError("Falha ao carregar QR Code")}
+                />
+              ) : (
+                <div className="mx-auto w-64 h-64 border border-slate-200 rounded-lg bg-slate-50 flex items-center justify-center text-xs text-slate-500 text-center p-4">
+                  {imageError ?? "A carregar QR Code…"}
+                </div>
+              )}
+            </div>
+
+            {/* Short code — destaque grande */}
+            {viewing.shortCode && (
+              <div className="rounded-xl bg-gradient-to-br from-brand-900 to-brand-800 text-white p-4 text-center">
+                <div className="flex items-center justify-center gap-2 text-xs uppercase tracking-wider text-coral-300 font-semibold mb-1">
+                  <KeyRound className="h-3.5 w-3.5" />
+                  Código manual
+                </div>
+                <div className="font-mono text-4xl font-bold tracking-[0.3em] py-1">{viewing.shortCode}</div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="mt-2 text-coral-300 hover:bg-white/10 hover:text-white"
+                  onClick={copyCode}
+                >
+                  {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  {copied ? "Copiado" : "Copiar código"}
+                </Button>
+              </div>
+            )}
+
+            {/* Detalhes */}
+            <div className="text-sm space-y-0.5 text-center text-slate-600">
+              <div>
+                <span className="font-semibold text-brand-900">{viewing.guestName}</span>
+                {viewing.guestDocument && <span> · {viewing.guestDocument}</span>}
+              </div>
+              <div>Válido até {formatDate(viewing.validUntil)}</div>
+              <div>Usos: {viewing.usedCount} / {viewing.maxUses}</div>
+            </div>
+
+            <p className="text-xs text-slate-500 text-center">
+              Partilhe o QR Code <strong>ou</strong> o código manual com o seu visitante. O porteiro pode validar de qualquer forma.
+            </p>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 

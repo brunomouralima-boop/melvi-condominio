@@ -303,6 +303,7 @@ model QRAccessCode {
   usedCount      Int          @default(0)
   isActive       Boolean      @default(true)
   qrCodeData     String       @unique
+  shortCode      String?      @unique  // código curto para digitação manual (6 chars, sem 0/1/I/O)
   createdById    String
   createdBy      User         @relation("QRCreator", fields: [createdById], references: [id])
   fractionId     String

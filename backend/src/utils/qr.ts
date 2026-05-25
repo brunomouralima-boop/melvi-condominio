@@ -35,3 +35,18 @@ export function verifyQR(encoded: string): SignedQRPayload | null {
 export async function generateQRImage(data: string): Promise<Buffer> {
   return QRCode.toBuffer(data, { type: "png", width: 512, margin: 2, errorCorrectionLevel: "M" });
 }
+
+/**
+ * Gera um código curto alfanumérico (6 caracteres) para digitação manual.
+ * Exclui caracteres ambíguos (0, 1, O, I, L) para evitar erros de leitura.
+ * Resultado tipo: "K3M9X2", "PQ7N4F".
+ */
+const SHORT_CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"; // 31 chars, sem 0/1/I/L/O
+export function generateShortCode(length = 6): string {
+  const bytes = crypto.randomBytes(length);
+  let out = "";
+  for (let i = 0; i < length; i++) {
+    out += SHORT_CODE_ALPHABET[bytes[i] % SHORT_CODE_ALPHABET.length];
+  }
+  return out;
+}

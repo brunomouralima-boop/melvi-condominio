@@ -1,0 +1,35 @@
+# ─── Dependencies / Build outputs ─────────
+node_modules/
+dist/
+build/
+frontend/dist/
+.vite/
+
+# ─── Environment & secrets ────────────────
+.env
+.env.local
+.env.*.local
+.env.production
+backend/.env
+backend/.env.local
+frontend/.env
+frontend/.env.local
+
+# ─── Logs & temporary ─────────────────────
+*.log
+logs/
+.DS_Store
+coverage/
+
+# ─── Uploads (preservar pasta, ignorar conteúdo) ─
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# ─── Production deploy artifacts ──────────
+# Config activa do nginx (gerada em runtime — não versionar)
+nginx/active.conf
+# Certificados SSL (nunca commitar)
+ssl/
+nginx/ssl/
+# Backups da base de dados
+backups/

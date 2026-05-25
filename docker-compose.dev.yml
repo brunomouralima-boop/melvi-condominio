@@ -1,0 +1,44 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: melvi-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: melvi
+      POSTGRES_PASSWORD: melvi_dev_pwd
+      POSTGRES_DB: melvi
+    ports:
+      # Host port 55432 → container 5432 (evita conflito com Postgres local)
+      # Para ligar via pgAdmin/DBeaver: host=localhost porta=55432
+      - "55432:5432"
+    volumes:
+      - melvi_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U melvi -d melvi"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    container_name: melvi-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://melvi:melvi_dev_pwd@postgres:5432/melvi?schema=public
+      NODE_ENV: development
+      PORT: 4000
+      JWT_ACCESS_SECRET: dev_access_secret_change_in_prod
+      JWT_REFRESH_SECRET: dev_refresh_secret_change_in_prod
+      QR_HMAC_SECRET: dev_qr_hmac_secret_change_in_prod
+      CORS_ORIGIN: http://localhost:5173
+      UPLOAD_DIR: /app/uploads
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./backend/uploads:/app/uploads
+
+volumes:
+  melvi_pg_data:

@@ -1,0 +1,508 @@
+// CondoHub Prisma schema
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ────────────────────────────────────────────────────────────
+// Enums
+// ────────────────────────────────────────────────────────────
+enum Role {
+  ADMIN
+  RESIDENT
+  DOORMAN
+}
+
+enum FractionType {
+  APARTMENT
+  COMMERCIAL
+  GARAGE
+  STORAGE
+  OTHER
+}
+
+enum FractionStatus {
+  OCCUPIED
+  VACANT
+  UNDER_RENOVATION
+  BLOCKED
+}
+
+enum QRAccessType {
+  VISITOR
+  SERVICE_PROVIDER
+  EMPLOYEE
+}
+
+enum AccessLogType {
+  ENTRY
+  EXIT
+}
+
+enum AccessMethod {
+  QR
+  MANUAL
+}
+
+enum OccurrenceCategory {
+  NOISE
+  MAINTENANCE
+  SECURITY
+  CLEANING
+  OTHER
+}
+
+enum OccurrenceStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum OccurrencePriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum PanicStatus {
+  ACTIVE
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+enum AnnouncementType {
+  INFO
+  WARNING
+  URGENT
+}
+
+enum ReservationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum FinancialType {
+  INCOME
+  EXPENSE
+}
+
+enum PackageStatus {
+  PENDING
+  DELIVERED
+}
+
+enum NotificationType {
+  INFO
+  PANIC
+  OCCURRENCE
+  ANNOUNCEMENT
+  RESERVATION
+  FINANCIAL
+  ACCESS
+}
+
+enum MeterType {
+  WATER
+  ELECTRICITY
+  GENERATOR
+  FUEL
+}
+
+// ────────────────────────────────────────────────────────────
+// Core models
+// ────────────────────────────────────────────────────────────
+model Condominium {
+  id          String       @id @default(uuid())
+  name        String       @unique
+  address     String
+  taxId       String?      @unique
+  logo        String?
+  phone       String?
+  email       String?
+  website     String?
+  isActive    Boolean      @default(true)
+  settings    Json?
+  towers      Tower[]
+  commonAreas CommonArea[]
+  meters      Meter[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Tower {
+  id            String      @id @default(uuid())
+  name          String
+  floors        Int
+  description   String?
+  isActive      Boolean     @default(true)
+  condominiumId String
+  condominium   Condominium @relation(fields: [condominiumId], references: [id], onDelete: Cascade)
+  fractions     Fraction[]
+  meters        Meter[]
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@unique([condominiumId, name])
+}
+
+model Fraction {
+  id              String          @id @default(uuid())
+  identifier      String
+  floor           Int
+  type            FractionType    @default(APARTMENT)
+  status          FractionStatus  @default(VACANT)
+  isActive        Boolean         @default(true)
+
+  // Métricas técnicas
+  permillage      Decimal         @db.Decimal(8, 4)
+  areaM2          Decimal         @db.Decimal(8, 2)
+  privateAreaM2   Decimal?        @db.Decimal(8, 2)
+  commonAreaM2    Decimal?        @db.Decimal(8, 2)
+  grossAreaM2     Decimal?        @db.Decimal(8, 2)
+
+  // Características
+  bedroomsCount   Int?            @default(0)
+  bathroomsCount  Int?            @default(0)
+  parkingSpots    Int?            @default(0)
+  hasBalcony      Boolean         @default(false)
+  hasSuite        Boolean         @default(false)
+  hasStorageRoom  Boolean         @default(false)
+  orientation     String?
+  description     String?
+  observations    String?
+
+  // Titulares
+  ownerId         String?
+  owner           User?           @relation("FractionOwner", fields: [ownerId], references: [id])
+  tenantId        String?         @unique
+  tenant          User?           @relation("FractionTenant", fields: [tenantId], references: [id])
+
+  // Relações
+  towerId         String
+  tower           Tower           @relation(fields: [towerId], references: [id], onDelete: Cascade)
+  residents       User[]          @relation("FractionResidence")
+
+  occurrences     Occurrence[]
+  qrCodes        QRAccessCode[]
+  accessLogs      AccessLog[]
+  panicAlerts     PanicAlert[]
+  reservations    Reservation[]
+  packages        Package[]
+  financialRecords FinancialRecord[]
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@unique([towerId, identifier])
+}
+
+model User {
+  id              String         @id @default(uuid())
+  name            String
+  email           String         @unique
+  password        String
+  role            Role
+  phone           String?
+  avatar          String?
+  isActive        Boolean        @default(true)
+  deletedAt       DateTime?
+
+  // Fracção de residência (cache para acesso rápido — sincronizado com owner/tenant)
+  fractionId      String?
+  fraction        Fraction?      @relation("FractionResidence", fields: [fractionId], references: [id])
+
+  // Múltiplas fracções como proprietário; uma única como inquilino
+  ownedFractions  Fraction[]     @relation("FractionOwner")
+  rentedFraction  Fraction?      @relation("FractionTenant")
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  dependents          Dependent[]
+  domesticEmployees   DomesticEmployee[]
+  vehicles            Vehicle[]
+  occurrencesCreated  Occurrence[]   @relation("OccurrenceCreator")
+  occurrencesAssigned Occurrence[]   @relation("OccurrenceAssignee")
+  panicAlerts         PanicAlert[]   @relation("PanicTriggered")
+  panicAcks           PanicAlert[]   @relation("PanicAcknowledged")
+  announcements       Announcement[]
+  reservations        Reservation[]
+  financialRecordsCreated FinancialRecord[] @relation("FinancialCreator")
+  qrCodesCreated      QRAccessCode[] @relation("QRCreator")
+  accessLogsRegistered AccessLog[]   @relation("AccessRegistrar")
+  packagesRegistered  Package[]      @relation("PackageRegistrar")
+  meterReadings       MeterReading[]
+  notifications       Notification[]
+  refreshTokens       RefreshToken[]
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model Dependent {
+  id           String   @id @default(uuid())
+  name         String
+  relationship String
+  document     String?
+  photo        String?
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+}
+
+model DomesticEmployee {
+  id        String   @id @default(uuid())
+  name      String
+  role      String
+  document  String?
+  photo     String?
+  isActive  Boolean  @default(true)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model Vehicle {
+  id        String   @id @default(uuid())
+  plate     String
+  brand     String
+  model     String
+  color     String
+  photo     String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model QRAccessCode {
+  id             String       @id @default(uuid())
+  type           QRAccessType
+  guestName      String
+  guestDocument  String?
+  guestCompany   String?
+  serviceType    String?
+  photo          String?
+  validFrom      DateTime
+  validUntil     DateTime
+  maxUses        Int          @default(1)
+  usedCount      Int          @default(0)
+  isActive       Boolean      @default(true)
+  qrCodeData     String       @unique
+  createdById    String
+  createdBy      User         @relation("QRCreator", fields: [createdById], references: [id])
+  fractionId     String
+  fraction       Fraction     @relation(fields: [fractionId], references: [id])
+  accessLogs     AccessLog[]
+  createdAt      DateTime     @default(now())
+}
+
+model AccessLog {
+  id             String        @id @default(uuid())
+  type           AccessLogType
+  personName     String
+  personDocument String?
+  fractionId     String?
+  fraction       Fraction?     @relation(fields: [fractionId], references: [id])
+  qrCodeId       String?
+  qrCode         QRAccessCode? @relation(fields: [qrCodeId], references: [id])
+  method         AccessMethod  @default(MANUAL)
+  registeredById String
+  registeredBy   User          @relation("AccessRegistrar", fields: [registeredById], references: [id])
+  notes          String?
+  timestamp      DateTime      @default(now())
+}
+
+model Occurrence {
+  id           String              @id @default(uuid())
+  title        String
+  category     OccurrenceCategory
+  description  String
+  photos       String[]
+  status       OccurrenceStatus    @default(OPEN)
+  priority     OccurrencePriority  @default(MEDIUM)
+  fractionId   String
+  fraction     Fraction            @relation(fields: [fractionId], references: [id])
+  createdById  String
+  createdBy    User                @relation("OccurrenceCreator", fields: [createdById], references: [id])
+  assignedToId String?
+  assignedTo   User?               @relation("OccurrenceAssignee", fields: [assignedToId], references: [id])
+  response     String?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+}
+
+model PanicAlert {
+  id               String      @id @default(uuid())
+  description      String
+  fractionId       String
+  fraction         Fraction    @relation(fields: [fractionId], references: [id])
+  triggeredById    String
+  triggeredBy      User        @relation("PanicTriggered", fields: [triggeredById], references: [id])
+  status           PanicStatus @default(ACTIVE)
+  acknowledgedById String?
+  acknowledgedBy   User?       @relation("PanicAcknowledged", fields: [acknowledgedById], references: [id])
+  acknowledgedAt   DateTime?
+  resolvedAt       DateTime?
+  createdAt        DateTime    @default(now())
+}
+
+model Announcement {
+  id          String           @id @default(uuid())
+  title       String
+  content     String
+  type        AnnouncementType @default(INFO)
+  attachments String[]
+  isPinned    Boolean          @default(false)
+  createdById String
+  createdBy   User             @relation(fields: [createdById], references: [id])
+  createdAt   DateTime         @default(now())
+}
+
+model CommonArea {
+  id            String       @id @default(uuid())
+  name          String
+  description   String
+  capacity      Int
+  rules         String?
+  photos        String[]
+  isActive      Boolean      @default(true)
+  condominiumId String
+  condominium   Condominium  @relation(fields: [condominiumId], references: [id], onDelete: Cascade)
+  reservations  Reservation[]
+}
+
+model Reservation {
+  id           String            @id @default(uuid())
+  commonAreaId String
+  commonArea   CommonArea        @relation(fields: [commonAreaId], references: [id])
+  fractionId   String
+  fraction     Fraction          @relation(fields: [fractionId], references: [id])
+  userId       String
+  user         User              @relation(fields: [userId], references: [id])
+  date         DateTime
+  startTime    String
+  endTime      String
+  status       ReservationStatus @default(PENDING)
+  notes        String?
+  createdAt    DateTime          @default(now())
+}
+
+model FinancialRecord {
+  id          String        @id @default(uuid())
+  type        FinancialType
+  category    String
+  description String
+  amount      Decimal       @db.Decimal(12, 2)
+  dueDate     DateTime
+  paidDate    DateTime?
+  fractionId  String?
+  fraction    Fraction?     @relation(fields: [fractionId], references: [id])
+  receiptUrl  String?
+  createdById String
+  createdBy   User          @relation("FinancialCreator", fields: [createdById], references: [id])
+  createdAt   DateTime      @default(now())
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      NotificationType @default(INFO)
+  isRead    Boolean          @default(false)
+  relatedId String?
+  createdAt DateTime         @default(now())
+}
+
+model Package {
+  id             String        @id @default(uuid())
+  description    String
+  sender         String
+  fractionId     String
+  fraction       Fraction      @relation(fields: [fractionId], references: [id])
+  receivedById   String
+  receivedBy     User          @relation("PackageRegistrar", fields: [receivedById], references: [id])
+  receivedAt     DateTime      @default(now())
+  deliveredAt    DateTime?
+  status         PackageStatus @default(PENDING)
+}
+
+// ────────────────────────────────────────────────────────────
+// Medidores
+// ────────────────────────────────────────────────────────────
+model Meter {
+  id              String          @id @default(uuid())
+  name            String
+  type            MeterType
+  serialNumber    String?
+  location        String?
+  unit            String          // m³, kWh, horas, litros
+  capacity        Decimal?        @db.Decimal(12, 2) // capacidade total (litros para FUEL)
+  isActive        Boolean         @default(true)
+  condominiumId   String
+  condominium     Condominium     @relation(fields: [condominiumId], references: [id], onDelete: Cascade)
+  towerId         String?
+  tower           Tower?          @relation(fields: [towerId], references: [id])
+  readings        MeterReading[]
+  generatorConfig GeneratorConfig?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+}
+
+model GeneratorConfig {
+  id                       String    @id @default(uuid())
+  meterId                  String    @unique
+  meter                    Meter     @relation(fields: [meterId], references: [id], onDelete: Cascade)
+  maintenanceIntervalHours Decimal   @db.Decimal(10, 2)
+  lastMaintenanceHours     Decimal   @db.Decimal(10, 2)
+  lastMaintenanceDate      DateTime?
+  notes                    String?
+  updatedAt                DateTime  @updatedAt
+}
+
+model MeterReading {
+  id              String   @id @default(uuid())
+  meterId         String
+  meter           Meter    @relation(fields: [meterId], references: [id], onDelete: Cascade)
+  readingValue    Decimal  @db.Decimal(12, 4)
+  previousValue   Decimal? @db.Decimal(12, 4)
+  consumption     Decimal? @db.Decimal(12, 4)
+  readingDate     DateTime @default(now())
+  readingMonth    Int
+  readingYear     Int
+  photo           String?
+  notes           String?
+  isReset         Boolean  @default(false)
+  registeredById  String
+  registeredBy    User     @relation(fields: [registeredById], references: [id])
+  createdAt       DateTime @default(now())
+
+  @@unique([meterId, readingMonth, readingYear])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  metadata  Json?
+  ip        String?
+  createdAt DateTime @default(now())
+}

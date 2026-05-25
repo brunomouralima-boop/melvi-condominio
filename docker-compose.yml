@@ -1,0 +1,124 @@
+# ───────────────────────────────────────────────────────────────
+# Melvi Condomínio — Stack de PRODUÇÃO
+#
+# Para correr LOCAL em DEV, usa:   docker compose -f docker-compose.dev.yml up
+# Para correr em PRODUÇÃO:         docker compose up -d
+#
+# Antes de subir em produção:
+#  1) Copia .env.example → .env e preenche os valores
+#  2) Garante que ./nginx/active.conf existe (copiado de nginx.http-only.conf)
+#  3) Corre scripts/deploy.sh
+# ───────────────────────────────────────────────────────────────
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: melvi-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - melvi_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Não expomos a porta 5432 publicamente em produção.
+    # Para acesso administrativo (pgAdmin/DBeaver), usar túnel SSH:
+    #   ssh -L 55432:localhost:5432 user@servidor
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: melvi-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}?schema=public
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-7d}
+      QR_HMAC_SECRET: ${QR_HMAC_SECRET}
+      # Por defeito usa https://${DOMAIN}, mas pode ser sobreposto no .env
+      # (útil para teste local: CORS_ORIGIN=http://localhost)
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://${DOMAIN}}
+      UPLOAD_DIR: /app/uploads
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-8}
+    volumes:
+      - uploads_data:/app/uploads
+    networks:
+      - melvi_net
+    # Backend NÃO é exposto publicamente — só via nginx reverse proxy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # URLs em produção apontam para o mesmo domínio (proxied via nginx)
+        # Em vazio, o frontend usa URLs relativas → o reverse proxy trata
+        VITE_API_URL: ""
+        VITE_SOCKET_URL: ""
+    container_name: melvi-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    networks:
+      - melvi_net
+    # Frontend também não é exposto publicamente
+
+  nginx:
+    image: nginx:alpine
+    container_name: melvi-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Configuração activa do nginx. Inicialmente aponta para nginx.http-only.conf.
+      # Após scripts/ssl.sh, este ficheiro é substituído pela versão com SSL.
+      - ./nginx/active.conf:/etc/nginx/conf.d/default.conf:ro
+      # Certificados Let's Encrypt
+      - certbot_certs:/etc/letsencrypt:ro
+      # ACME challenge
+      - certbot_www:/var/www/certbot:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - melvi_net
+
+  certbot:
+    image: certbot/certbot
+    container_name: melvi-certbot
+    restart: "no"
+    volumes:
+      - certbot_certs:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    networks:
+      - melvi_net
+    # Não arranca automaticamente — só é invocado por scripts/ssl.sh
+    # ou pelo cron de renovação:
+    #   0 3 * * * docker compose run --rm certbot renew && docker compose exec nginx nginx -s reload
+    entrypoint: ["echo", "Certbot está pronto. Usa: scripts/ssl.sh"]
+
+volumes:
+  postgres_data:
+  uploads_data:
+  certbot_certs:
+  certbot_www:
+
+networks:
+  melvi_net:
+    driver: bridge

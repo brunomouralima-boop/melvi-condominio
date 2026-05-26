@@ -37,16 +37,22 @@ export async function generateQRImage(data: string): Promise<Buffer> {
 }
 
 /**
- * Gera um código curto alfanumérico (6 caracteres) para digitação manual.
- * Exclui caracteres ambíguos (0, 1, O, I, L) para evitar erros de leitura.
- * Resultado tipo: "K3M9X2", "PQ7N4F".
+ * Gera um código numérico de 4 dígitos (0–9) para digitação manual.
+ * Usa crypto.randomBytes para entropia real (não Math.random).
+ * Resultado tipo: "3847", "0291", "9100".
+ *
+ * NOTA DE SEGURANÇA: 4 dígitos = 10 000 combinações apenas.
+ * Mitigado por:
+ *  - Rate limiting na rota /qr-codes/validate
+ *  - Validade temporal curta (validFrom/validUntil)
+ *  - maxUses (tipicamente 1 — uma vez usado, fica inválido)
+ *  - Cada código está associado a uma fracção específica
  */
-const SHORT_CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"; // 31 chars, sem 0/1/I/L/O
-export function generateShortCode(length = 6): string {
+export function generateShortCode(length = 4): string {
   const bytes = crypto.randomBytes(length);
   let out = "";
   for (let i = 0; i < length; i++) {
-    out += SHORT_CODE_ALPHABET[bytes[i] % SHORT_CODE_ALPHABET.length];
+    out += String(bytes[i] % 10); // dígito 0–9
   }
   return out;
 }

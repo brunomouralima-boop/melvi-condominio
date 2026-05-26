@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import crypto from "crypto";
+import rateLimit from "express-rate-limit";
 import { Role, QRAccessType, AccessLogType, AccessMethod } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate, authorize } from "../middleware/auth";
@@ -10,6 +11,21 @@ import { verifyAccessToken } from "../utils/jwt";
 import { emitToRole } from "../sockets";
 
 const router = Router();
+
+/**
+ * Rate limiter para a rota /validate.
+ * Com códigos de 4 dígitos (10 000 combinações), limitar tentativas é crítico
+ * para impedir ataques de força-bruta. 20 tentativas / minuto / IP é
+ * generoso para uso legítimo (porteiro com erros de digitação) mas torna
+ * inviável tentar todas as 10 000 combinações em tempo útil.
+ */
+const validateLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minuto
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { valid: false, reason: "Demasiadas tentativas. Aguarde 1 minuto." },
+});
 
 // ─────────────────────────────────────────────────────────────
 // GET /:id/image — DEVE ficar ANTES do middleware authenticate
@@ -86,12 +102,18 @@ router.post("/", validateBody(createSchema), async (req, res) => {
     expiresAt: body.validUntil,
   });
 
-  // Gera um shortCode único — em caso colisão (rara, ~1 em 30^6 ≈ 700M), tenta de novo
+  // Gera um shortCode único (4 dígitos = 10 000 combinações).
+  // Tentamos até 50 vezes em caso de colisão. Em produção real, se a base
+  // crescer muito, considera implementar nullify de shortCode quando QR é
+  // usado/expira para libertar o slot.
   let shortCode = generateShortCode();
-  for (let attempt = 0; attempt < 5; attempt++) {
+  for (let attempt = 0; attempt < 50; attempt++) {
     const exists = await prisma.qRAccessCode.findUnique({ where: { shortCode } });
     if (!exists) break;
     shortCode = generateShortCode();
+    if (attempt === 49) {
+      return res.status(503).json({ error: "Espaço de códigos esgotado, tente mais tarde." });
+    }
   }
 
   const created = await prisma.qRAccessCode.create({
@@ -142,7 +164,7 @@ const validateSchema = z
     message: "qrCodeData ou shortCode obrigatório",
   });
 
-router.post("/validate", authorize(Role.DOORMAN, Role.ADMIN), validateBody(validateSchema), async (req, res) => {
+router.post("/validate", validateLimiter, authorize(Role.DOORMAN, Role.ADMIN), validateBody(validateSchema), async (req, res) => {
   const { qrCodeData, shortCode } = req.body as z.infer<typeof validateSchema>;
 
   let qrId: string | null = null;
@@ -152,8 +174,11 @@ router.post("/validate", authorize(Role.DOORMAN, Role.ADMIN), validateBody(valid
     if (!payload) return res.status(400).json({ valid: false, reason: "QR Code inválido (assinatura)" });
     qrId = payload.id;
   } else if (shortCode) {
-    // Normalizar: upper case + remover espaços
-    const normalized = shortCode.trim().toUpperCase();
+    // Normalizar: remover tudo que não seja dígito (espaços, hifens, etc)
+    const normalized = shortCode.replace(/\D/g, "");
+    if (normalized.length !== 4) {
+      return res.status(400).json({ valid: false, reason: "Código deve ter 4 dígitos" });
+    }
     const qr = await prisma.qRAccessCode.findUnique({ where: { shortCode: normalized } });
     if (!qr) return res.status(404).json({ valid: false, reason: "Código não encontrado" });
     qrId = qr.id;

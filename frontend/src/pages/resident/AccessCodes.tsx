@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogTitle, DialogHeader, DialogFooter } from "
 import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/utils";
 import type { QRAccessCode } from "@/types";
+import { AccessShare } from "@/components/AccessShare";
 import toast from "react-hot-toast";
 
 const TYPE_LABEL: Record<string, string> = {
@@ -71,7 +72,7 @@ export function ResidentAccessCodes() {
                 {q.shortCode && (
                   <div className="rounded-lg bg-brand-50 border border-brand-200 p-2 text-center">
                     <div className="text-[10px] uppercase tracking-wider text-brand-700 font-semibold">Código</div>
-                    <div className="font-mono text-lg font-bold text-brand-900 tracking-widest">{q.shortCode}</div>
+                    <div className="font-mono text-2xl font-bold text-brand-900 tracking-[0.3em] pl-[0.3em]">{q.shortCode}</div>
                   </div>
                 )}
                 {q.guestDocument && <div>Doc: {q.guestDocument}</div>}
@@ -172,14 +173,14 @@ function QRViewerDialog({ viewing, onClose }: { viewing: QRAccessCode | null; on
               )}
             </div>
 
-            {/* Short code — destaque grande */}
+            {/* Short code — destaque grande (4 dígitos) */}
             {viewing.shortCode && (
               <div className="rounded-xl bg-gradient-to-br from-brand-900 to-brand-800 text-white p-4 text-center">
                 <div className="flex items-center justify-center gap-2 text-xs uppercase tracking-wider text-coral-300 font-semibold mb-1">
                   <KeyRound className="h-3.5 w-3.5" />
-                  Código manual
+                  Código de 4 dígitos
                 </div>
-                <div className="font-mono text-4xl font-bold tracking-[0.3em] py-1">{viewing.shortCode}</div>
+                <div className="font-mono text-5xl font-bold tracking-[0.5em] pl-[0.5em] py-2">{viewing.shortCode}</div>
                 <Button
                   size="sm"
                   variant="ghost"
@@ -202,8 +203,15 @@ function QRViewerDialog({ viewing, onClose }: { viewing: QRAccessCode | null; on
               <div>Usos: {viewing.usedCount} / {viewing.maxUses}</div>
             </div>
 
+            {/* Partilhar via WhatsApp / SMS / nativo */}
+            {viewing.shortCode && (
+              <div className="border-t border-slate-100 pt-3">
+                <AccessShare qr={viewing} />
+              </div>
+            )}
+
             <p className="text-xs text-slate-500 text-center">
-              Partilhe o QR Code <strong>ou</strong> o código manual com o seu visitante. O porteiro pode validar de qualquer forma.
+              Partilhe o QR Code <strong>ou</strong> o código de 4 dígitos com o seu visitante. O porteiro pode validar de qualquer forma.
             </p>
           </div>
         )}

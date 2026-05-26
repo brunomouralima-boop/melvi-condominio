@@ -270,49 +270,61 @@ export function DoormanDashboard() {
 }
 
 /**
- * Input específico para shortCode (6 chars).
- * - Aceita só A-Z e 0-9
- * - Auto-uppercase
- * - Submete com Enter
+ * Input específico para shortCode (4 dígitos numéricos).
+ * - Aceita só 0-9
+ * - Teclado numérico em telemóveis (inputMode="numeric")
+ * - Auto-submete quando atinge 4 dígitos (UX optimizada para porteiro rápido)
  */
 function ShortCodeForm({ onSubmit }: { onSubmit: (code: string) => void }) {
   const [code, setCode] = useState("");
 
   function normalize(input: string) {
-    return input.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+    return input.replace(/\D/g, "").slice(0, 4);
+  }
+
+  function handleChange(input: string) {
+    const normalized = normalize(input);
+    setCode(normalized);
+    // Auto-submit quando atinge 4 dígitos
+    if (normalized.length === 4) {
+      // Defer um pouco para o utilizador ver o último dígito a aparecer
+      setTimeout(() => {
+        onSubmit(normalized);
+        setCode("");
+      }, 150);
+    }
   }
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    const normalized = code.trim();
-    if (normalized.length < 4) {
-      toast.error("Código demasiado curto");
+    if (code.length !== 4) {
+      toast.error("Código deve ter 4 dígitos");
       return;
     }
-    onSubmit(normalized);
+    onSubmit(code);
     setCode("");
   }
 
   return (
     <form onSubmit={submit} className="space-y-3">
       <div>
-        <Label>Código fornecido pelo visitante</Label>
+        <Label>Código de 4 dígitos fornecido pelo visitante</Label>
         <Input
           type="text"
-          inputMode="text"
-          autoCapitalize="characters"
-          autoComplete="off"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          autoComplete="one-time-code"
           autoCorrect="off"
           spellCheck={false}
           value={code}
-          onChange={(e) => setCode(normalize(e.target.value))}
-          placeholder="K3M9X2"
-          className="text-2xl font-mono tracking-[0.4em] text-center font-bold h-14"
-          maxLength={8}
+          onChange={(e) => handleChange(e.target.value)}
+          placeholder="0000"
+          className="text-5xl font-mono tracking-[0.5em] pl-[0.5em] text-center font-bold h-20"
+          maxLength={4}
         />
-        <p className="text-xs text-slate-500 mt-1">6 caracteres. O código foi gerado pelo residente.</p>
+        <p className="text-xs text-slate-500 mt-1 text-center">Valida automaticamente ao escrever os 4 dígitos.</p>
       </div>
-      <Button type="submit" size="lg" className="w-full" disabled={code.length < 4}>
+      <Button type="submit" size="lg" className="w-full" disabled={code.length !== 4}>
         <KeyRound className="h-5 w-5" /> Validar código
       </Button>
     </form>

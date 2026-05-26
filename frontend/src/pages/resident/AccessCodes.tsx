@@ -226,13 +226,34 @@ function NewAccessDialog({ open, onClose, onCreated }: { open: boolean; onClose:
   const [guestDocument, setGuestDocument] = useState("");
   const [guestCompany, setGuestCompany] = useState("");
   const [serviceType, setServiceType] = useState("");
-  const [validHours, setValidHours] = useState(24);
+  // Validade — agora pedida como data + hora explícitas em vez de número de horas
+  // Default: amanhã às 18:00 (hora local)
+  const defaultDateTime = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    d.setHours(18, 0, 0, 0);
+    // YYYY-MM-DD
+    const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    return { date, time: "18:00" };
+  })();
+  const [validDate, setValidDate] = useState(defaultDateTime.date);
+  const [validTime, setValidTime] = useState(defaultDateTime.time);
   const [maxUses, setMaxUses] = useState(1);
+
+  // ISO mínimo (now) — para input type="date" como atributo `min`
+  const todayISO = new Date().toISOString().slice(0, 10);
 
   const create = useMutation({
     mutationFn: () => {
+      // Combina date + time em datetime local → ISO
+      const until = new Date(`${validDate}T${validTime}:00`);
       const now = new Date();
-      const until = new Date(now.getTime() + validHours * 3600 * 1000);
+      if (isNaN(until.getTime())) {
+        throw new Error("Data ou hora inválidas");
+      }
+      if (until.getTime() <= now.getTime()) {
+        throw new Error("A data/hora de expiração deve ser no futuro");
+      }
       return api.post("/qr-codes", {
         type,
         guestName,
@@ -249,7 +270,7 @@ function NewAccessDialog({ open, onClose, onCreated }: { open: boolean; onClose:
       setGuestName(""); setGuestDocument(""); setGuestCompany(""); setServiceType("");
       onCreated(); onClose();
     },
-    onError: (e: any) => toast.error(e?.response?.data?.error || "Falha ao criar"),
+    onError: (e: any) => toast.error(e?.response?.data?.error || e?.message || "Falha ao criar"),
   });
 
   return (
@@ -285,15 +306,42 @@ function NewAccessDialog({ open, onClose, onCreated }: { open: boolean; onClose:
               </div>
             </>
           )}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Validade (horas)</Label>
-              <Input type="number" min={1} max={720} value={validHours} onChange={(e) => setValidHours(Number(e.target.value))} />
+          <div>
+            <Label>Válido até</Label>
+            <div className="grid grid-cols-2 gap-3 mt-1">
+              <div>
+                <Input
+                  type="date"
+                  value={validDate}
+                  min={todayISO}
+                  onChange={(e) => setValidDate(e.target.value)}
+                  required
+                />
+                <p className="text-xs text-slate-500 mt-1">Data</p>
+              </div>
+              <div>
+                <Input
+                  type="time"
+                  value={validTime}
+                  onChange={(e) => setValidTime(e.target.value)}
+                  required
+                />
+                <p className="text-xs text-slate-500 mt-1">Hora</p>
+              </div>
             </div>
-            <div>
-              <Label>Usos máximos</Label>
-              <Input type="number" min={1} max={20} value={maxUses} onChange={(e) => setMaxUses(Number(e.target.value))} />
-            </div>
+          </div>
+          <div>
+            <Label>Usos máximos</Label>
+            <Input
+              type="number"
+              min={1}
+              max={20}
+              value={maxUses}
+              onChange={(e) => setMaxUses(Number(e.target.value))}
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              Quantas vezes o código pode ser usado pelo porteiro (tipicamente 1).
+            </p>
           </div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={onClose}>Cancelar</Button>

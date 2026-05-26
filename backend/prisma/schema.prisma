@@ -520,15 +520,13 @@ model AuditLog {
   createdAt DateTime @default(now())
 }
 
-/**
- * Visita = ciclo de vida completo de um visitante no condomínio.
- *
- * Diferente de AccessLog (que regista eventos brutos individuais), o Visit
- * representa o "objecto" da visita: quem, quando entrou, quando saiu, etc.
- * Quando o porteiro valida um QR / código curto, o sistema cria automaticamente
- * uma Visit com status=INSIDE. Quando o porteiro clica em "Registar saída",
- * o sistema actualiza essa Visit com exitAt + durationMinutes + status=EXITED.
- */
+// Visita = ciclo de vida completo de um visitante no condomínio.
+//
+// Diferente de AccessLog (que regista eventos brutos individuais), o Visit
+// representa o "objecto" da visita: quem, quando entrou, quando saiu, etc.
+// Quando o porteiro valida um QR / código curto, o sistema cria automaticamente
+// uma Visit com status=INSIDE. Quando o porteiro clica em "Registar saída",
+// o sistema actualiza essa Visit com exitAt + durationMinutes + status=EXITED.
 model Visit {
   id                    String       @id @default(uuid())
   guestName             String

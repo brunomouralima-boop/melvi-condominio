@@ -226,33 +226,46 @@ function NewAccessDialog({ open, onClose, onCreated }: { open: boolean; onClose:
   const [guestDocument, setGuestDocument] = useState("");
   const [guestCompany, setGuestCompany] = useState("");
   const [serviceType, setServiceType] = useState("");
-  // Validade — agora pedida como data + hora explícitas em vez de número de horas
-  // Default: amanhã às 18:00 (hora local)
+  // Data + hora prevista de chegada do visitante (informativa)
+  // O acesso fica válido desde a criação até às 00:00 do dia SEGUINTE
+  // (i.e. o acesso expira ao virar da meia-noite do dia escolhido).
   const defaultDateTime = (() => {
     const d = new Date();
-    d.setDate(d.getDate() + 1);
-    d.setHours(18, 0, 0, 0);
-    // YYYY-MM-DD
+    // Default: hoje, próxima hora redonda
+    d.setHours(d.getHours() + 1, 0, 0, 0);
     const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    return { date, time: "18:00" };
+    const time = `${String(d.getHours()).padStart(2, "0")}:00`;
+    return { date, time };
   })();
-  const [validDate, setValidDate] = useState(defaultDateTime.date);
-  const [validTime, setValidTime] = useState(defaultDateTime.time);
+  const [arrivalDate, setArrivalDate] = useState(defaultDateTime.date);
+  const [arrivalTime, setArrivalTime] = useState(defaultDateTime.time);
   const [maxUses, setMaxUses] = useState(1);
 
-  // ISO mínimo (now) — para input type="date" como atributo `min`
+  // ISO mínimo (hoje) — para input type="date" como atributo `min`
   const todayISO = new Date().toISOString().slice(0, 10);
+
+  // Calcula validUntil = 00:00 do dia SEGUINTE à data escolhida (em hora local)
+  const computeValidUntil = (dateStr: string): Date => {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    // new Date(y, m-1, d+1, 0, 0, 0, 0) → 00:00 do dia seguinte
+    return new Date(y, m - 1, d + 1, 0, 0, 0, 0);
+  };
+
+  // Formata para mostrar ao residente
+  const expiresAt = computeValidUntil(arrivalDate);
+  const expiresPreview = `${String(expiresAt.getDate()).padStart(2, "0")}/${String(
+    expiresAt.getMonth() + 1
+  ).padStart(2, "0")}/${expiresAt.getFullYear()} às 00:00`;
 
   const create = useMutation({
     mutationFn: () => {
-      // Combina date + time em datetime local → ISO
-      const until = new Date(`${validDate}T${validTime}:00`);
+      const until = computeValidUntil(arrivalDate);
       const now = new Date();
       if (isNaN(until.getTime())) {
-        throw new Error("Data ou hora inválidas");
+        throw new Error("Data inválida");
       }
       if (until.getTime() <= now.getTime()) {
-        throw new Error("A data/hora de expiração deve ser no futuro");
+        throw new Error("A data escolhida já passou");
       }
       return api.post("/qr-codes", {
         type,
@@ -307,14 +320,14 @@ function NewAccessDialog({ open, onClose, onCreated }: { open: boolean; onClose:
             </>
           )}
           <div>
-            <Label>Válido até</Label>
+            <Label>Chegada prevista do visitante</Label>
             <div className="grid grid-cols-2 gap-3 mt-1">
               <div>
                 <Input
                   type="date"
-                  value={validDate}
+                  value={arrivalDate}
                   min={todayISO}
-                  onChange={(e) => setValidDate(e.target.value)}
+                  onChange={(e) => setArrivalDate(e.target.value)}
                   required
                 />
                 <p className="text-xs text-slate-500 mt-1">Data</p>
@@ -322,12 +335,19 @@ function NewAccessDialog({ open, onClose, onCreated }: { open: boolean; onClose:
               <div>
                 <Input
                   type="time"
-                  value={validTime}
-                  onChange={(e) => setValidTime(e.target.value)}
+                  value={arrivalTime}
+                  onChange={(e) => setArrivalTime(e.target.value)}
                   required
                 />
                 <p className="text-xs text-slate-500 mt-1">Hora</p>
               </div>
+            </div>
+            <div className="mt-2 rounded-lg bg-brand-50 border border-brand-100 px-3 py-2 text-xs text-brand-800 flex items-start gap-2">
+              <span className="text-brand-500 mt-0.5">⏰</span>
+              <span>
+                O acesso será válido a partir de agora e expira automaticamente em{" "}
+                <strong>{expiresPreview}</strong> (meia-noite do dia escolhido).
+              </span>
             </div>
           </div>
           <div>

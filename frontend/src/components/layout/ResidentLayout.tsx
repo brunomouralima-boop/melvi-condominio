@@ -18,6 +18,7 @@ const items: SidebarEntry[] = [
   { to: "/resident", label: "Dashboard", icon: LayoutDashboard, end: true },
   { to: "/resident/occurrences", label: "Ocorrências", icon: AlertTriangle },
   { to: "/resident/access-codes", label: "Acessos QR", icon: QrCode },
+  { to: "/resident/visits", label: "Visitas", icon: Users },
   { to: "/resident/dependents", label: "Dependentes", icon: Users },
   { to: "/resident/employees", label: "Funcionários", icon: Briefcase },
   { to: "/resident/vehicles", label: "Viaturas", icon: Car },

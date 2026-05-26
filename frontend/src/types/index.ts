@@ -94,6 +94,29 @@ export interface Occurrence {
   updatedAt: string;
 }
 
+export type VisitStatus = "SCHEDULED" | "WAITING" | "INSIDE" | "EXITED" | "CANCELLED";
+
+export interface Visit {
+  id: string;
+  guestName: string;
+  guestDocument?: string | null;
+  status: VisitStatus;
+  entryAt?: string | null;
+  exitAt?: string | null;
+  durationMinutes?: number | null;
+  notes?: string | null;
+  fractionId: string;
+  fraction?: { id: string; identifier: string; floor: number; tower?: { id: string; name: string } } | null;
+  qrCodeId?: string | null;
+  qrCode?: { id: string; type: string; shortCode?: string | null } | null;
+  authorizedById?: string | null;
+  authorizedBy?: { id: string; name: string; role?: string } | null;
+  exitRegisteredById?: string | null;
+  exitRegisteredBy?: { id: string; name: string; role?: string } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type QRAccessType = "VISITOR" | "SERVICE_PROVIDER" | "EMPLOYEE";
 
 export interface QRAccessCode {

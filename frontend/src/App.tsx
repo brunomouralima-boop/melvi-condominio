@@ -27,6 +27,7 @@ import { AdminCondominium } from "@/pages/admin/Condominium";
 import { AdminTowers } from "@/pages/admin/Towers";
 import { AdminFractions } from "@/pages/admin/Fractions";
 import { AdminMeters } from "@/pages/admin/Meters";
+import { VisitsHistoryPage } from "@/pages/admin/VisitsHistory";
 
 import { ResidentDashboard } from "@/pages/resident/Dashboard";
 import { ResidentOccurrences } from "@/pages/resident/Occurrences";
@@ -37,6 +38,7 @@ import { ResidentVehicles } from "@/pages/resident/Vehicles";
 import { ResidentInfo } from "@/pages/resident/Info";
 import { ResidentFinancial } from "@/pages/resident/Financial";
 import { ResidentReservations } from "@/pages/resident/Reservations";
+import { ResidentVisits } from "@/pages/resident/Visits";
 
 import { DoormanDashboard } from "@/pages/doorman/Dashboard";
 
@@ -82,6 +84,7 @@ export default function App() {
                 <Route path="occurrences" element={<AdminOccurrences />} />
                 <Route path="panic-alerts" element={<AdminPanicAlerts />} />
                 <Route path="access" element={<AdminAccessLogs />} />
+                <Route path="visits" element={<VisitsHistoryPage />} />
                 <Route path="announcements" element={<AdminAnnouncements />} />
                 <Route path="common-areas" element={<AdminCommonAreas />} />
                 <Route path="financial" element={<AdminFinancial />} />
@@ -108,6 +111,7 @@ export default function App() {
                 <Route path="info" element={<ResidentInfo />} />
                 <Route path="financial" element={<ResidentFinancial />} />
                 <Route path="reservations" element={<ResidentReservations />} />
+                <Route path="visits" element={<ResidentVisits />} />
               </Route>
 
               <Route
@@ -120,6 +124,7 @@ export default function App() {
               >
                 <Route index element={<DoormanDashboard />} />
                 <Route path="scanner" element={<DoormanDashboard />} />
+                <Route path="visits" element={<VisitsHistoryPage />} />
                 <Route path="packages" element={<PackagesPage />} />
               </Route>
 

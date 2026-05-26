@@ -110,6 +110,14 @@ enum NotificationType {
   ACCESS
 }
 
+enum VisitStatus {
+  SCHEDULED   // agendado (QR criado, ainda não chegou)
+  WAITING     // chegou à portaria, à espera de validação
+  INSIDE      // dentro do condomínio (entrada validada)
+  EXITED      // saiu do condomínio
+  CANCELLED   // cancelado pelo residente / admin
+}
+
 enum MeterType {
   WATER
   ELECTRICITY
@@ -194,6 +202,7 @@ model Fraction {
   occurrences     Occurrence[]
   qrCodes        QRAccessCode[]
   accessLogs      AccessLog[]
+  visits          Visit[]
   panicAlerts     PanicAlert[]
   reservations    Reservation[]
   packages        Package[]
@@ -243,6 +252,8 @@ model User {
   meterReadings       MeterReading[]
   notifications       Notification[]
   refreshTokens       RefreshToken[]
+  visitsAuthorized      Visit[]      @relation("VisitAuthorizer")
+  visitsExitRegistered  Visit[]      @relation("VisitExitRegistrar")
 }
 
 model RefreshToken {
@@ -309,6 +320,7 @@ model QRAccessCode {
   fractionId     String
   fraction       Fraction     @relation(fields: [fractionId], references: [id])
   accessLogs     AccessLog[]
+  visits         Visit[]
   createdAt      DateTime     @default(now())
 }
 
@@ -506,4 +518,47 @@ model AuditLog {
   metadata  Json?
   ip        String?
   createdAt DateTime @default(now())
+}
+
+/**
+ * Visita = ciclo de vida completo de um visitante no condomínio.
+ *
+ * Diferente de AccessLog (que regista eventos brutos individuais), o Visit
+ * representa o "objecto" da visita: quem, quando entrou, quando saiu, etc.
+ * Quando o porteiro valida um QR / código curto, o sistema cria automaticamente
+ * uma Visit com status=INSIDE. Quando o porteiro clica em "Registar saída",
+ * o sistema actualiza essa Visit com exitAt + durationMinutes + status=EXITED.
+ */
+model Visit {
+  id                    String       @id @default(uuid())
+  guestName             String
+  guestDocument         String?
+  status                VisitStatus  @default(INSIDE)
+  entryAt               DateTime?    // quando entrou efectivamente (status=INSIDE)
+  exitAt                DateTime?    // quando saiu (status=EXITED)
+  durationMinutes       Int?         // calculado: exitAt - entryAt em minutos
+  notes                 String?
+
+  // Fracção que vai visitar (sempre obrigatória)
+  fractionId            String
+  fraction              Fraction     @relation(fields: [fractionId], references: [id])
+
+  // QR Code usado (opcional — pode ser entrada manual sem QR)
+  qrCodeId              String?
+  qrCode                QRAccessCode? @relation(fields: [qrCodeId], references: [id])
+
+  // Quem autorizou a entrada (porteiro/admin)
+  authorizedById        String?
+  authorizedBy          User?        @relation("VisitAuthorizer", fields: [authorizedById], references: [id])
+
+  // Quem registou a saída (pode ser diferente do que autorizou)
+  exitRegisteredById    String?
+  exitRegisteredBy      User?        @relation("VisitExitRegistrar", fields: [exitRegisteredById], references: [id])
+
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  @@index([status])
+  @@index([fractionId, status])
+  @@index([entryAt])
 }

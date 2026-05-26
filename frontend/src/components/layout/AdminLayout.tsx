@@ -39,6 +39,7 @@ const entries: SidebarEntry[] = [
   { to: "/admin/occurrences", label: "Ocorrências", icon: AlertTriangle },
   { to: "/admin/panic-alerts", label: "Alertas de Pânico", icon: Siren },
   { to: "/admin/access", label: "Controlo de Acesso", icon: ShieldCheck },
+  { to: "/admin/visits", label: "Visitas", icon: Users },
   { to: "/admin/announcements", label: "Comunicados", icon: Megaphone },
   { to: "/admin/common-areas", label: "Áreas Comuns", icon: Calendar },
   { to: "/admin/financial", label: "Financeiro", icon: Wallet },

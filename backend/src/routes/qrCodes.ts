@@ -201,23 +201,58 @@ router.post("/validate", validateLimiter, authorize(Role.DOORMAN, Role.ADMIN), v
   if (now > qr.validUntil) return res.json({ valid: false, reason: "Acesso expirado", qr });
   if (qr.usedCount >= qr.maxUses) return res.json({ valid: false, reason: "Acesso já foi utilizado", qr });
 
-  const log = await prisma.accessLog.create({
-    data: {
-      type: AccessLogType.ENTRY,
-      personName: qr.guestName,
-      personDocument: qr.guestDocument,
-      fractionId: qr.fractionId,
-      qrCodeId: qr.id,
-      method: qrCodeData ? AccessMethod.QR : AccessMethod.MANUAL,
-      registeredById: req.user!.sub,
-      notes: `Validado por ${qrCodeData ? "QR Code" : "código manual"} — ${qr.type}`,
-    },
-    include: { fraction: { include: { tower: true } } },
-  });
+  // Cria AccessLog (evento bruto — audit trail) E Visit (objecto da visita)
+  // dentro de uma transacção para garantir consistência.
+  const { log, visit } = await prisma.$transaction(async (tx) => {
+    const entryAt = new Date();
 
-  await prisma.qRAccessCode.update({
-    where: { id: qr.id },
-    data: { usedCount: { increment: 1 } },
+    const log = await tx.accessLog.create({
+      data: {
+        type: AccessLogType.ENTRY,
+        personName: qr.guestName,
+        personDocument: qr.guestDocument,
+        fractionId: qr.fractionId,
+        qrCodeId: qr.id,
+        method: qrCodeData ? AccessMethod.QR : AccessMethod.MANUAL,
+        registeredById: req.user!.sub,
+        notes: `Validado por ${qrCodeData ? "QR Code" : "código manual"} — ${qr.type}`,
+      },
+      include: { fraction: { include: { tower: true } } },
+    });
+
+    const visit = await tx.visit.create({
+      data: {
+        guestName: qr.guestName,
+        guestDocument: qr.guestDocument,
+        status: "INSIDE",
+        entryAt,
+        fractionId: qr.fractionId,
+        qrCodeId: qr.id,
+        authorizedById: req.user!.sub,
+        notes: `Entrada via ${qrCodeData ? "QR Code" : "código manual"} — ${qr.type}`,
+      },
+      include: {
+        fraction: { include: { tower: true } },
+        authorizedBy: { select: { id: true, name: true } },
+      },
+    });
+
+    await tx.qRAccessCode.update({
+      where: { id: qr.id },
+      data: { usedCount: { increment: 1 } },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        userId: req.user!.sub,
+        action: "VISIT_ENTRY",
+        entity: "Visit",
+        entityId: visit.id,
+        metadata: { method: qrCodeData ? "QR" : "SHORTCODE", qrCodeId: qr.id },
+      },
+    });
+
+    return { log, visit };
   });
 
   await prisma.notification.create({
@@ -226,14 +261,16 @@ router.post("/validate", validateLimiter, authorize(Role.DOORMAN, Role.ADMIN), v
       title: "Visitante autorizado entrou",
       message: `${qr.guestName} acaba de entrar no condomínio.`,
       type: "ACCESS",
-      relatedId: log.id,
+      relatedId: visit.id,
     },
   });
 
   emitToRole(Role.ADMIN, "access:new", log);
   emitToRole(Role.DOORMAN, "access:new", log);
+  emitToRole(Role.ADMIN, "visit:entry", visit);
+  emitToRole(Role.DOORMAN, "visit:entry", visit);
 
-  res.json({ valid: true, qr, log });
+  res.json({ valid: true, qr, log, visit });
 });
 
 export default router;

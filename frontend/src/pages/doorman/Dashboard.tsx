@@ -7,6 +7,7 @@ import { Input, Label, Select } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogTitle, DialogHeader, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { QRScanner } from "@/components/QRScanner";
+import { VisitorsInsidePanel } from "@/components/visits/VisitorsInsidePanel";
 import { api } from "@/lib/api";
 import { formatDate } from "@/lib/utils";
 import { useSocketEvent } from "@/contexts/SocketContext";
@@ -141,6 +142,9 @@ export function DoormanDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Painel "Visitantes no Condomínio" — tempo real, com botão Saída */}
+      <VisitorsInsidePanel />
 
       {/* Registo manual de pessoa (não baseado em QR) */}
       <Card>

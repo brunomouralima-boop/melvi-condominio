@@ -25,6 +25,12 @@ coverage/
 backend/uploads/*
 !backend/uploads/.gitkeep
 
+# ─── App de Finanças & Património (SQLite) ─
+financas/backend/prisma/*.db
+financas/backend/prisma/*.db-journal
+*.db
+*.db-journal
+
 # ─── Production deploy artifacts ──────────
 # Config activa do nginx (gerada em runtime — não versionar)
 nginx/active.conf

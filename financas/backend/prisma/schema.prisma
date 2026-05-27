@@ -1,0 +1,147 @@
+// Finanças & Património Familiar
+// SQLite não suporta enums nativos no Prisma — usamos String validado por Zod.
+// Valores monetários em Float (entrada manual; arredondamento feito na apresentação).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Titular de lançamentos/património: cada cônjuge + a entidade "Conjunto" (casal).
+model Member {
+  id        String   @id @default(cuid())
+  name      String
+  kind      String   @default("PERSON") // PERSON | JOINT
+  color     String   @default("#2563eb")
+  createdAt DateTime @default(now())
+
+  user         User?
+  accounts     Account[]
+  transactions Transaction[]
+  assets       Asset[]
+  liabilities  Liability[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  memberId     String?  @unique
+  member       Member?  @relation(fields: [memberId], references: [id])
+  createdAt    DateTime @default(now())
+}
+
+// Moeda. AOA é a base (isBase=true, rateToBase=1). rateToBase = valor de 1 unidade em AOA.
+model Currency {
+  code      String   @id // AOA, USD, EUR, BRL...
+  name      String
+  symbol    String
+  isBase    Boolean  @default(false)
+  rateToBase Float   @default(1) // 1 unidade desta moeda = rateToBase AOA
+  updatedAt DateTime @updatedAt
+
+  accounts         Account[]
+  transactions     Transaction[]
+  transactionsTo   Transaction[] @relation("ToCurrency")
+  assets           Asset[]
+  liabilities      Liability[]
+}
+
+model Account {
+  id             String   @id @default(cuid())
+  name           String
+  institution    String   @default("") // banco/instituição
+  type           String   @default("CHECKING") // CHECKING | SAVINGS | CASH | INVESTMENT | WALLET
+  currencyCode   String
+  currency       Currency @relation(fields: [currencyCode], references: [code])
+  memberId       String
+  member         Member   @relation(fields: [memberId], references: [id])
+  openingBalance Float    @default(0)
+  archived       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  transactions     Transaction[] @relation("AccountTx")
+  transactionsTo   Transaction[] @relation("ToAccountTx")
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String
+  kind      String   @default("EXPENSE") // INCOME | EXPENSE
+  color     String   @default("#64748b")
+  parentId  String?
+  parent    Category?  @relation("CategoryChildren", fields: [parentId], references: [id])
+  children  Category[] @relation("CategoryChildren")
+  createdAt DateTime @default(now())
+
+  transactions Transaction[]
+}
+
+model Transaction {
+  id           String   @id @default(cuid())
+  date         DateTime @default(now())
+  type         String   @default("EXPENSE") // INCOME | EXPENSE | TRANSFER
+  amount       Float
+  currencyCode String
+  currency     Currency @relation(fields: [currencyCode], references: [code])
+
+  accountId    String
+  account      Account  @relation("AccountTx", fields: [accountId], references: [id])
+
+  // Apenas para TRANSFER (conta destino, eventualmente noutra moeda)
+  toAccountId    String?
+  toAccount      Account?  @relation("ToAccountTx", fields: [toAccountId], references: [id])
+  toAmount       Float?
+  toCurrencyCode String?
+  toCurrency     Currency? @relation("ToCurrency", fields: [toCurrencyCode], references: [code])
+
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id])
+
+  memberId String
+  member   Member @relation(fields: [memberId], references: [id])
+
+  description String   @default("")
+  createdAt   DateTime @default(now())
+
+  @@index([date])
+  @@index([accountId])
+}
+
+model Asset {
+  id              String   @id @default(cuid())
+  name            String
+  type            String   @default("OTHER") // PROPERTY | VEHICLE | INVESTMENT | OTHER
+  memberId        String
+  member          Member   @relation(fields: [memberId], references: [id])
+  currencyCode    String
+  currency        Currency @relation(fields: [currencyCode], references: [code])
+  value           Float    @default(0) // valor atual / avaliado
+  acquisitionValue Float?
+  acquisitionDate DateTime?
+  notes           String   @default("")
+  createdAt       DateTime @default(now())
+
+  liabilities Liability[]
+}
+
+model Liability {
+  id                String   @id @default(cuid())
+  name              String
+  type              String   @default("LOAN") // MORTGAGE | LOAN | CREDIT | OTHER
+  memberId          String
+  member            Member   @relation(fields: [memberId], references: [id])
+  currencyCode      String
+  currency          Currency @relation(fields: [currencyCode], references: [code])
+  outstandingBalance Float   @default(0) // saldo devedor atual
+  originalAmount    Float?
+  linkedAssetId     String?
+  linkedAsset       Asset?   @relation(fields: [linkedAssetId], references: [id])
+  notes             String   @default("")
+  createdAt         DateTime @default(now())
+}

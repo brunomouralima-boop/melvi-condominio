@@ -8,7 +8,7 @@ import {
   VoteChoice,
 } from "@prisma/client";
 import { prisma } from "../prisma";
-import { authenticate, authorize } from "../middleware/auth";
+import { authenticate, authorize, isAdmin } from "../middleware/auth";
 import { resolveCondominium, tenantWhere } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 
@@ -46,7 +46,7 @@ function tallyOf(votes: { choice: VoteChoice; weight: any }[]): Tally {
 // ===========================================================================
 router.get("/", async (req, res) => {
   const where: any = { ...tenantWhere(req) };
-  if (req.user!.role !== Role.ADMIN) where.status = { not: AssemblyStatus.DRAFT };
+  if (!isAdmin(req.user!.role)) where.status = { not: AssemblyStatus.DRAFT };
 
   const items = await prisma.assembly.findMany({
     where,
@@ -71,7 +71,7 @@ router.get("/:id", async (req, res) => {
   if (assembly.condominiumId && assembly.condominiumId !== req.condominiumId) {
     return res.status(404).json({ error: "Assembleia não encontrada" });
   }
-  if (req.user!.role !== Role.ADMIN && assembly.status === AssemblyStatus.DRAFT) {
+  if (!isAdmin(req.user!.role) && assembly.status === AssemblyStatus.DRAFT) {
     return res.status(403).json({ error: "Forbidden" });
   }
 

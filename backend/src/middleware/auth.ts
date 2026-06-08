@@ -25,6 +25,13 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+// ADMIN_ORG é, para efeitos de dados, um administrador (do condomínio activo).
+// Usar em verificações de scope/ownership para não despromover o ADMIN_ORG a
+// "só os seus registos" (a `authorize()` já o deixa passar nestas rotas).
+export function isAdmin(role: Role): boolean {
+  return role === Role.ADMIN || role === Role.ADMIN_ORG;
+}
+
 export function authorize(...roles: Role[]) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) return res.status(401).json({ error: "Unauthenticated" });

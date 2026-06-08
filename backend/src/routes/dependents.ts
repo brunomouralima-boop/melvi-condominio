@@ -1,8 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
-import { Role } from "@prisma/client";
 import { prisma } from "../prisma";
-import { authenticate, authorize } from "../middleware/auth";
+import { authenticate, authorize, isAdmin } from "../middleware/auth";
 import { resolveCondominium, ownerCondoScope } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 
@@ -12,7 +11,7 @@ router.use(resolveCondominium);
 
 router.get("/", async (req, res) => {
   // Admin vê os do condomínio activo (via condomínio do dono); residente só os seus.
-  const where = req.user!.role === Role.ADMIN ? ownerCondoScope(req) : { userId: req.user!.sub };
+  const where = isAdmin(req.user!.role) ? ownerCondoScope(req) : { userId: req.user!.sub };
   const items = await prisma.dependent.findMany({ where, orderBy: { createdAt: "desc" } });
   res.json(items);
 });
@@ -35,7 +34,7 @@ router.post("/", validateBody(createSchema), async (req, res) => {
 router.put("/:id", async (req, res) => {
   const dep = await prisma.dependent.findUnique({ where: { id: req.params.id } });
   if (!dep) return res.status(404).json({ error: "Not found" });
-  if (req.user!.role !== Role.ADMIN && dep.userId !== req.user!.sub) {
+  if (!isAdmin(req.user!.role) && dep.userId !== req.user!.sub) {
     return res.status(403).json({ error: "Forbidden" });
   }
   const schema = z.object({
@@ -54,7 +53,7 @@ router.put("/:id", async (req, res) => {
 router.delete("/:id", async (req, res) => {
   const dep = await prisma.dependent.findUnique({ where: { id: req.params.id } });
   if (!dep) return res.status(404).json({ error: "Not found" });
-  if (req.user!.role !== Role.ADMIN && dep.userId !== req.user!.sub) {
+  if (!isAdmin(req.user!.role) && dep.userId !== req.user!.sub) {
     return res.status(403).json({ error: "Forbidden" });
   }
   await prisma.dependent.delete({ where: { id: req.params.id } });

@@ -328,6 +328,66 @@ export interface MaintenanceStats {
   preventiveDue: number;
 }
 
+// ─────────── Assembleias ───────────
+export type AssemblyType = "ORDINARY" | "EXTRAORDINARY";
+export type AssemblyStatus = "DRAFT" | "SCHEDULED" | "IN_PROGRESS" | "CLOSED" | "CANCELLED";
+export type AgendaItemStatus = "PENDING" | "VOTING_OPEN" | "VOTING_CLOSED" | "APPROVED" | "REJECTED";
+export type VoteChoice = "FOR" | "AGAINST" | "ABSTAIN";
+
+export interface AssemblyListItem {
+  id: string;
+  title: string;
+  type: AssemblyType;
+  status: AssemblyStatus;
+  scheduledAt: string;
+  location?: string | null;
+  _count?: { agendaItems: number };
+}
+
+export interface AgendaTally {
+  forWeight: number;
+  againstWeight: number;
+  abstainWeight: number;
+  forCount: number;
+  againstCount: number;
+  abstainCount: number;
+  totalWeight: number;
+  totalCount: number;
+}
+
+export interface AgendaItemFull {
+  id: string;
+  order: number;
+  title: string;
+  description?: string | null;
+  status: AgendaItemStatus;
+  requiresVote: boolean;
+  tally: AgendaTally;
+  myVotes: { fractionId: string; choice: VoteChoice }[];
+}
+
+export interface MyFraction {
+  id: string;
+  identifier: string;
+  tower?: string | null;
+  permillage: number;
+}
+
+export interface AssemblyDetail {
+  id: string;
+  title: string;
+  type: AssemblyType;
+  status: AssemblyStatus;
+  scheduledAt: string;
+  location?: string | null;
+  description?: string | null;
+  quorumPermillage?: number | null;
+  createdBy?: { id: string; name: string };
+  agendaItems: AgendaItemFull[];
+  myFractions: MyFraction[];
+  totalPermillage: number;
+}
+
 // ─────────── Documentos ───────────
 export type DocumentCategory = "MINUTES" | "REGULATION" | "CONTRACT" | "FINANCIAL" | "CIRCULAR" | "OTHER";
 

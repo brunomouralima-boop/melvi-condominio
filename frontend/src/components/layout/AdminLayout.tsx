@@ -27,6 +27,7 @@ import {
   Truck,
   CalendarClock,
   FolderOpen,
+  Vote,
 } from "lucide-react";
 import { Sidebar, SidebarEntry } from "./Sidebar";
 import { MobileTopbar } from "./MobileTopbar";
@@ -50,6 +51,7 @@ const entries: SidebarEntry[] = [
   { to: "/admin/visits", label: "Visitas", icon: Users },
   { to: "/admin/announcements", label: "Comunicados", icon: Megaphone },
   { to: "/admin/documents", label: "Documentos", icon: FolderOpen },
+  { to: "/admin/assemblies", label: "Assembleias", icon: Vote },
   { to: "/admin/common-areas", label: "Áreas Comuns", icon: Calendar },
   {
     label: "Financeiro",

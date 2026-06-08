@@ -11,6 +11,7 @@ import {
   Wallet,
   Calendar,
   FolderOpen,
+  Vote,
 } from "lucide-react";
 import { Sidebar, SidebarEntry } from "./Sidebar";
 import { MobileTopbar } from "./MobileTopbar";
@@ -27,6 +28,7 @@ const items: SidebarEntry[] = [
   { to: "/resident/info", label: "Informações", icon: Info },
   { to: "/resident/financial", label: "Financeiro", icon: Wallet },
   { to: "/resident/reservations", label: "Reservas", icon: Calendar },
+  { to: "/resident/assemblies", label: "Assembleias", icon: Vote },
 ];
 
 export function ResidentLayout() {

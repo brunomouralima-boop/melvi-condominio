@@ -29,6 +29,10 @@ import { AdminPreventiveMaintenance } from "@/pages/admin/PreventiveMaintenance"
 import { AdminSuppliers } from "@/pages/admin/Suppliers";
 import { AdminDocuments } from "@/pages/admin/Documents";
 import { ResidentDocuments } from "@/pages/resident/Documents";
+import { AdminAssemblies } from "@/pages/admin/Assemblies";
+import { AdminAssemblyDetail } from "@/pages/admin/AssemblyDetail";
+import { ResidentAssemblies } from "@/pages/resident/Assemblies";
+import { ResidentAssemblyDetail } from "@/pages/resident/AssemblyDetail";
 import { AdminSettings } from "@/pages/admin/Settings";
 import { AdminCondominium } from "@/pages/admin/Condominium";
 import { AdminTowers } from "@/pages/admin/Towers";
@@ -94,6 +98,8 @@ export default function App() {
                 <Route path="visits" element={<VisitsHistoryPage />} />
                 <Route path="announcements" element={<AdminAnnouncements />} />
                 <Route path="documents" element={<AdminDocuments />} />
+                <Route path="assemblies" element={<AdminAssemblies />} />
+                <Route path="assemblies/:id" element={<AdminAssemblyDetail />} />
                 <Route path="common-areas" element={<AdminCommonAreas />} />
                 <Route path="financial" element={<AdminFinancial />} />
                 <Route path="delinquency" element={<AdminDelinquency />} />
@@ -122,6 +128,8 @@ export default function App() {
                 <Route path="employees" element={<ResidentEmployees />} />
                 <Route path="vehicles" element={<ResidentVehicles />} />
                 <Route path="documents" element={<ResidentDocuments />} />
+                <Route path="assemblies" element={<ResidentAssemblies />} />
+                <Route path="assemblies/:id" element={<ResidentAssemblyDetail />} />
                 <Route path="info" element={<ResidentInfo />} />
                 <Route path="financial" element={<ResidentFinancial />} />
                 <Route path="reservations" element={<ResidentReservations />} />

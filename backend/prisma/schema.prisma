@@ -144,6 +144,7 @@ model Condominium {
   meters      Meter[]
   suppliers   Supplier[]
   documents   Document[]
+  assemblies  Assembly[]
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 }
@@ -211,6 +212,7 @@ model Fraction {
   packages        Package[]
   financialRecords FinancialRecord[]
   maintenanceOrders MaintenanceOrder[]
+  votes           Vote[]
 
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
@@ -260,6 +262,8 @@ model User {
   visitsExitRegistered  Visit[]      @relation("VisitExitRegistrar")
   maintenanceCreated    MaintenanceOrder[] @relation("MaintenanceCreator")
   documentsUploaded     Document[]   @relation("DocumentUploader")
+  assembliesCreated     Assembly[]   @relation("AssemblyCreator")
+  votesCast             Vote[]       @relation("VoteCaster")
 }
 
 model RefreshToken {
@@ -696,4 +700,94 @@ model Document {
 
   @@index([category])
   @@index([visibleToResidents])
+}
+
+// ---------------------------------------------------------------------------
+// Assembleias de condóminos + votação ponderada por permilagem
+// ---------------------------------------------------------------------------
+enum AssemblyType {
+  ORDINARY       // ordinária
+  EXTRAORDINARY  // extraordinária
+}
+
+enum AssemblyStatus {
+  DRAFT        // rascunho (a preparar)
+  SCHEDULED    // convocada / publicada
+  IN_PROGRESS  // a decorrer
+  CLOSED       // encerrada
+  CANCELLED
+}
+
+enum AgendaItemStatus {
+  PENDING        // ainda sem votação
+  VOTING_OPEN    // votação aberta
+  VOTING_CLOSED  // votação fechada (apurada)
+  APPROVED
+  REJECTED
+}
+
+enum VoteChoice {
+  FOR
+  AGAINST
+  ABSTAIN
+}
+
+model Assembly {
+  id               String         @id @default(uuid())
+  title            String
+  type             AssemblyType   @default(ORDINARY)
+  status           AssemblyStatus @default(DRAFT)
+  scheduledAt      DateTime
+  location         String?
+  description      String?        // convocatória / notas
+  quorumPermillage Decimal?       @db.Decimal(8, 4)
+
+  condominiumId    String?
+  condominium      Condominium?   @relation(fields: [condominiumId], references: [id])
+
+  createdById      String
+  createdBy        User           @relation("AssemblyCreator", fields: [createdById], references: [id])
+
+  agendaItems      AgendaItem[]
+
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([status])
+  @@index([scheduledAt])
+}
+
+model AgendaItem {
+  id           String           @id @default(uuid())
+  assemblyId   String
+  assembly     Assembly         @relation(fields: [assemblyId], references: [id], onDelete: Cascade)
+  order        Int              @default(0)
+  title        String
+  description  String?
+  status       AgendaItemStatus @default(PENDING)
+  requiresVote Boolean          @default(true)
+
+  votes        Vote[]
+
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([assemblyId])
+}
+
+model Vote {
+  id           String     @id @default(uuid())
+  agendaItemId String
+  agendaItem   AgendaItem @relation(fields: [agendaItemId], references: [id], onDelete: Cascade)
+  fractionId   String
+  fraction     Fraction   @relation(fields: [fractionId], references: [id])
+  userId       String
+  user         User       @relation("VoteCaster", fields: [userId], references: [id])
+  choice       VoteChoice
+  weight       Decimal    @db.Decimal(8, 4) // permilagem da fração no momento do voto
+
+  createdAt    DateTime   @default(now())
+
+  @@unique([agendaItemId, fractionId]) // 1 voto por fração por ponto
+  @@index([agendaItemId])
 }

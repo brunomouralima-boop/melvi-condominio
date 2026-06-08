@@ -9,10 +9,12 @@ import {
 } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate, authorize } from "../middleware/auth";
+import { resolveCondominium, tenantWhere } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 
 const router = Router();
 router.use(authenticate);
+router.use(resolveCondominium);
 
 function round4(n: number) {
   return Math.round((n + Number.EPSILON) * 10000) / 10000;
@@ -43,7 +45,7 @@ function tallyOf(votes: { choice: VoteChoice; weight: any }[]): Tally {
 // Listagem
 // ===========================================================================
 router.get("/", async (req, res) => {
-  const where: any = {};
+  const where: any = { ...tenantWhere(req) };
   if (req.user!.role !== Role.ADMIN) where.status = { not: AssemblyStatus.DRAFT };
 
   const items = await prisma.assembly.findMany({
@@ -66,17 +68,20 @@ router.get("/:id", async (req, res) => {
     },
   });
   if (!assembly) return res.status(404).json({ error: "Assembleia não encontrada" });
+  if (assembly.condominiumId && assembly.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ error: "Assembleia não encontrada" });
+  }
   if (req.user!.role !== Role.ADMIN && assembly.status === AssemblyStatus.DRAFT) {
     return res.status(403).json({ error: "Forbidden" });
   }
 
   const [myFractions, allFr] = await Promise.all([
     prisma.fraction.findMany({
-      where: { ownerId: req.user!.sub, isActive: true },
+      where: { ...tenantWhere(req), ownerId: req.user!.sub, isActive: true },
       select: { id: true, identifier: true, permillage: true, tower: { select: { name: true } } },
       orderBy: { identifier: "asc" },
     }),
-    prisma.fraction.aggregate({ _sum: { permillage: true }, where: { isActive: true } }),
+    prisma.fraction.aggregate({ _sum: { permillage: true }, where: { ...tenantWhere(req), isActive: true } }),
   ]);
   const myFractionIds = new Set(myFractions.map((f) => f.id));
 
@@ -133,7 +138,6 @@ const assemblySchema = z.object({
 
 router.post("/", authorize(Role.ADMIN), validateBody(assemblySchema), async (req, res) => {
   const b = req.body as z.infer<typeof assemblySchema>;
-  const condo = await prisma.condominium.findFirst({ select: { id: true } });
   const a = await prisma.assembly.create({
     data: {
       title: b.title,
@@ -143,7 +147,7 @@ router.post("/", authorize(Role.ADMIN), validateBody(assemblySchema), async (req
       location: b.location ?? null,
       description: b.description ?? null,
       quorumPermillage: b.quorumPermillage ?? null,
-      condominiumId: condo?.id ?? null,
+      condominiumId: req.condominiumId ?? null,
       createdById: req.user!.sub,
     },
   });
@@ -153,6 +157,9 @@ router.post("/", authorize(Role.ADMIN), validateBody(assemblySchema), async (req
 router.put("/:id", authorize(Role.ADMIN), validateBody(assemblySchema.partial()), async (req, res) => {
   const existing = await prisma.assembly.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: "Assembleia não encontrada" });
+  if (existing.condominiumId && existing.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ error: "Assembleia não encontrada" });
+  }
   const b = req.body as Partial<z.infer<typeof assemblySchema>>;
   const data: any = {};
   if (b.title !== undefined) data.title = b.title;
@@ -169,6 +176,9 @@ router.put("/:id", authorize(Role.ADMIN), validateBody(assemblySchema.partial())
 router.delete("/:id", authorize(Role.ADMIN), async (req, res) => {
   const existing = await prisma.assembly.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: "Assembleia não encontrada" });
+  if (existing.condominiumId && existing.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ error: "Assembleia não encontrada" });
+  }
   await prisma.assembly.delete({ where: { id: req.params.id } });
   res.json({ ok: true });
 });
@@ -186,6 +196,9 @@ const agendaSchema = z.object({
 router.post("/:id/agenda", authorize(Role.ADMIN), validateBody(agendaSchema), async (req, res) => {
   const assembly = await prisma.assembly.findUnique({ where: { id: req.params.id } });
   if (!assembly) return res.status(404).json({ error: "Assembleia não encontrada" });
+  if (assembly.condominiumId && assembly.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ error: "Assembleia não encontrada" });
+  }
   const b = req.body as z.infer<typeof agendaSchema>;
   const count = await prisma.agendaItem.count({ where: { assemblyId: req.params.id } });
   const item = await prisma.agendaItem.create({
@@ -201,8 +214,14 @@ router.post("/:id/agenda", authorize(Role.ADMIN), validateBody(agendaSchema), as
 });
 
 router.put("/:id/agenda/:itemId", authorize(Role.ADMIN), validateBody(agendaSchema.partial()), async (req, res) => {
-  const item = await prisma.agendaItem.findUnique({ where: { id: req.params.itemId } });
+  const item = await prisma.agendaItem.findUnique({
+    where: { id: req.params.itemId },
+    include: { assembly: { select: { condominiumId: true } } },
+  });
   if (!item || item.assemblyId !== req.params.id) return res.status(404).json({ error: "Ponto não encontrado" });
+  if (item.assembly.condominiumId && item.assembly.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ error: "Ponto não encontrado" });
+  }
   const b = req.body as Partial<z.infer<typeof agendaSchema>>;
   const data: any = {};
   if (b.title !== undefined) data.title = b.title;
@@ -214,16 +233,28 @@ router.put("/:id/agenda/:itemId", authorize(Role.ADMIN), validateBody(agendaSche
 });
 
 router.delete("/:id/agenda/:itemId", authorize(Role.ADMIN), async (req, res) => {
-  const item = await prisma.agendaItem.findUnique({ where: { id: req.params.itemId } });
+  const item = await prisma.agendaItem.findUnique({
+    where: { id: req.params.itemId },
+    include: { assembly: { select: { condominiumId: true } } },
+  });
   if (!item || item.assemblyId !== req.params.id) return res.status(404).json({ error: "Ponto não encontrado" });
+  if (item.assembly.condominiumId && item.assembly.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ error: "Ponto não encontrado" });
+  }
   await prisma.agendaItem.delete({ where: { id: req.params.itemId } });
   res.json({ ok: true });
 });
 
 // Abrir votação (admin)
 router.post("/:id/agenda/:itemId/open", authorize(Role.ADMIN), async (req, res) => {
-  const item = await prisma.agendaItem.findUnique({ where: { id: req.params.itemId } });
+  const item = await prisma.agendaItem.findUnique({
+    where: { id: req.params.itemId },
+    include: { assembly: { select: { condominiumId: true } } },
+  });
   if (!item || item.assemblyId !== req.params.id) return res.status(404).json({ error: "Ponto não encontrado" });
+  if (item.assembly.condominiumId && item.assembly.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ error: "Ponto não encontrado" });
+  }
   const updated = await prisma.agendaItem.update({
     where: { id: req.params.itemId },
     data: { status: AgendaItemStatus.VOTING_OPEN },
@@ -235,9 +266,12 @@ router.post("/:id/agenda/:itemId/open", authorize(Role.ADMIN), async (req, res) 
 router.post("/:id/agenda/:itemId/close", authorize(Role.ADMIN), async (req, res) => {
   const item = await prisma.agendaItem.findUnique({
     where: { id: req.params.itemId },
-    include: { votes: true },
+    include: { votes: true, assembly: { select: { condominiumId: true } } },
   });
   if (!item || item.assemblyId !== req.params.id) return res.status(404).json({ error: "Ponto não encontrado" });
+  if (item.assembly.condominiumId && item.assembly.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ error: "Ponto não encontrado" });
+  }
 
   const t = tallyOf(item.votes);
   const approved = t.forWeight > t.againstWeight;
@@ -258,16 +292,25 @@ const voteSchema = z.object({
 
 router.post("/:id/agenda/:itemId/vote", validateBody(voteSchema), async (req, res) => {
   const b = req.body as z.infer<typeof voteSchema>;
-  const item = await prisma.agendaItem.findUnique({ where: { id: req.params.itemId } });
+  const item = await prisma.agendaItem.findUnique({
+    where: { id: req.params.itemId },
+    include: { assembly: { select: { condominiumId: true } } },
+  });
   if (!item || item.assemblyId !== req.params.id) return res.status(404).json({ error: "Ponto não encontrado" });
+  if (item.assembly.condominiumId && item.assembly.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ error: "Ponto não encontrado" });
+  }
   if (item.status !== AgendaItemStatus.VOTING_OPEN) {
     return res.status(400).json({ error: "A votação deste ponto não está aberta." });
   }
 
-  // A fração tem de pertencer ao utilizador (proprietário)
+  // A fração tem de pertencer ao utilizador (proprietário) e ao condomínio activo
   const fraction = await prisma.fraction.findUnique({ where: { id: b.fractionId } });
   if (!fraction || fraction.ownerId !== req.user!.sub) {
     return res.status(403).json({ error: "Só o proprietário da fração pode votar por ela." });
+  }
+  if (fraction.condominiumId && fraction.condominiumId !== req.condominiumId) {
+    return res.status(403).json({ error: "Fração não pertence a este condomínio." });
   }
 
   const vote = await prisma.vote.upsert({

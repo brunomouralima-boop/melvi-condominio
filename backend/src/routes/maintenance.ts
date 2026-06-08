@@ -9,11 +9,13 @@ import {
 } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate, authorize } from "../middleware/auth";
+import { resolveCondominium, tenantWhere } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 
 const router = Router();
 router.use(authenticate);
 router.use(authorize(Role.ADMIN));
+router.use(resolveCondominium);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -41,7 +43,7 @@ const orderInclude = {
 // FORNECEDORES
 // ===========================================================================
 router.get("/suppliers", async (req, res) => {
-  const where: any = {};
+  const where: any = { ...tenantWhere(req) };
   if (req.query.active === "true") where.isActive = true;
   const items = await prisma.supplier.findMany({
     where,
@@ -73,6 +75,7 @@ router.post("/suppliers", validateBody(supplierSchema), async (req, res) => {
       email: body.email || null,
       taxId: body.taxId || null,
       notes: body.notes || null,
+      condominiumId: req.condominiumId,
     },
   });
   res.status(201).json(item);
@@ -81,11 +84,19 @@ router.post("/suppliers", validateBody(supplierSchema), async (req, res) => {
 router.put("/suppliers/:id", validateBody(supplierSchema.partial()), async (req, res) => {
   const existing = await prisma.supplier.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: "Fornecedor não encontrado" });
+  if (existing.condominiumId && existing.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ error: "Fornecedor não encontrado" });
+  }
   const item = await prisma.supplier.update({ where: { id: req.params.id }, data: req.body });
   res.json(item);
 });
 
 router.delete("/suppliers/:id", async (req, res) => {
+  const existing = await prisma.supplier.findUnique({ where: { id: req.params.id } });
+  if (!existing) return res.status(404).json({ error: "Fornecedor não encontrado" });
+  if (existing.condominiumId && existing.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ error: "Fornecedor não encontrado" });
+  }
   const count = await prisma.maintenanceOrder.count({ where: { supplierId: req.params.id } });
   if (count > 0) {
     // tem ordens associadas → apenas desactivar
@@ -100,7 +111,7 @@ router.delete("/suppliers/:id", async (req, res) => {
 // ORDENS DE MANUTENÇÃO
 // ===========================================================================
 router.get("/orders", async (req, res) => {
-  const where: any = {};
+  const where: any = { ...tenantWhere(req) };
   if (req.query.status) where.status = req.query.status;
   if (req.query.kind) where.kind = req.query.kind;
   if (req.query.priority) where.priority = req.query.priority;
@@ -113,20 +124,21 @@ router.get("/orders", async (req, res) => {
   res.json(items);
 });
 
-router.get("/orders/stats", async (_req, res) => {
+router.get("/orders/stats", async (req, res) => {
   const now = new Date();
   const soon = new Date();
   soon.setDate(soon.getDate() + 30);
+  const scope = tenantWhere(req);
 
   const [open, inProgress, scheduled, doneMonth, preventiveDue] = await Promise.all([
-    prisma.maintenanceOrder.count({ where: { status: MaintenanceStatus.OPEN } }),
-    prisma.maintenanceOrder.count({ where: { status: MaintenanceStatus.IN_PROGRESS } }),
-    prisma.maintenanceOrder.count({ where: { status: MaintenanceStatus.SCHEDULED } }),
+    prisma.maintenanceOrder.count({ where: { ...scope, status: MaintenanceStatus.OPEN } }),
+    prisma.maintenanceOrder.count({ where: { ...scope, status: MaintenanceStatus.IN_PROGRESS } }),
+    prisma.maintenanceOrder.count({ where: { ...scope, status: MaintenanceStatus.SCHEDULED } }),
     prisma.maintenanceOrder.count({
-      where: { status: MaintenanceStatus.DONE, completedDate: { gte: new Date(now.getFullYear(), now.getMonth(), 1) } },
+      where: { ...scope, status: MaintenanceStatus.DONE, completedDate: { gte: new Date(now.getFullYear(), now.getMonth(), 1) } },
     }),
     prisma.maintenanceOrder.count({
-      where: { kind: MaintenanceKind.PREVENTIVE, nextDueDate: { lte: soon } },
+      where: { ...scope, kind: MaintenanceKind.PREVENTIVE, nextDueDate: { lte: soon } },
     }),
   ]);
 
@@ -172,7 +184,7 @@ function toData(body: z.infer<typeof orderSchema>) {
 router.post("/orders", validateBody(orderSchema), async (req, res) => {
   const body = req.body as z.infer<typeof orderSchema>;
   const item = await prisma.maintenanceOrder.create({
-    data: { ...toData(body), title: body.title, createdById: req.user!.sub },
+    data: { ...toData(body), title: body.title, condominiumId: req.condominiumId, createdById: req.user!.sub },
     include: orderInclude,
   });
   res.status(201).json(item);
@@ -181,6 +193,9 @@ router.post("/orders", validateBody(orderSchema), async (req, res) => {
 router.put("/orders/:id", validateBody(orderSchema.partial()), async (req, res) => {
   const existing = await prisma.maintenanceOrder.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: "Ordem não encontrada" });
+  if (existing.condominiumId && existing.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ error: "Ordem não encontrada" });
+  }
   const item = await prisma.maintenanceOrder.update({
     where: { id: req.params.id },
     data: toData(req.body),
@@ -193,6 +208,9 @@ router.put("/orders/:id", validateBody(orderSchema.partial()), async (req, res) 
 router.post("/orders/:id/complete", async (req, res) => {
   const o = await prisma.maintenanceOrder.findUnique({ where: { id: req.params.id } });
   if (!o) return res.status(404).json({ error: "Ordem não encontrada" });
+  if (o.condominiumId && o.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ error: "Ordem não encontrada" });
+  }
 
   const now = new Date();
   let data: any = { completedDate: now };
@@ -216,6 +234,9 @@ router.post("/orders/:id/complete", async (req, res) => {
 router.delete("/orders/:id", async (req, res) => {
   const existing = await prisma.maintenanceOrder.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: "Ordem não encontrada" });
+  if (existing.condominiumId && existing.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ error: "Ordem não encontrada" });
+  }
   await prisma.maintenanceOrder.delete({ where: { id: req.params.id } });
   res.json({ ok: true });
 });

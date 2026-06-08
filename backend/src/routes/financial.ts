@@ -4,10 +4,12 @@ import { z } from "zod";
 import { Role, FinancialType } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate, authorize } from "../middleware/auth";
+import { resolveCondominium, tenantWhere, scopeWhere } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 
 const router = Router();
 router.use(authenticate);
+router.use(resolveCondominium);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -33,7 +35,7 @@ function competenceLabel(competence: string): string {
 // Listagem de lançamentos
 // ---------------------------------------------------------------------------
 router.get("/records", async (req, res) => {
-  const where: any = {};
+  const where: any = { ...tenantWhere(req) };
   if (req.user!.role === Role.RESIDENT) where.fractionId = req.user!.fractionId;
   const items = await prisma.financialRecord.findMany({
     where,
@@ -67,6 +69,7 @@ router.post("/records", authorize(Role.ADMIN), validateBody(createSchema), async
       paidDate: body.paidDate ? new Date(body.paidDate) : null,
       fractionId: body.fractionId ?? null,
       receiptUrl: body.receiptUrl ?? null,
+      condominiumId: req.condominiumId,
       createdById: req.user!.sub,
     },
   });
@@ -85,6 +88,9 @@ router.post("/records/:id/pay", authorize(Role.ADMIN), validateBody(paySchema), 
   const body = req.body as z.infer<typeof paySchema>;
   const existing = await prisma.financialRecord.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: "Lançamento não encontrado" });
+  if (existing.condominiumId && existing.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ error: "Lançamento não encontrado" });
+  }
   const item = await prisma.financialRecord.update({
     where: { id: req.params.id },
     data: {
@@ -99,6 +105,9 @@ router.post("/records/:id/pay", authorize(Role.ADMIN), validateBody(paySchema), 
 router.post("/records/:id/unpay", authorize(Role.ADMIN), async (req, res) => {
   const existing = await prisma.financialRecord.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: "Lançamento não encontrado" });
+  if (existing.condominiumId && existing.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ error: "Lançamento não encontrado" });
+  }
   const item = await prisma.financialRecord.update({
     where: { id: req.params.id },
     data: { paidDate: null },
@@ -127,7 +136,7 @@ router.post("/charges/batch", authorize(Role.ADMIN), validateBody(batchSchema), 
 
   // 1. Frações activas alvo
   const fractions = await prisma.fraction.findMany({
-    where: { isActive: true, ...(body.towerId ? { towerId: body.towerId } : {}) },
+    where: { isActive: true, ...tenantWhere(req), ...(body.towerId ? { towerId: body.towerId } : {}) },
     orderBy: [{ towerId: "asc" }, { identifier: "asc" }],
     select: { id: true, identifier: true, permillage: true, areaM2: true, towerId: true },
   });
@@ -166,6 +175,7 @@ router.post("/charges/batch", authorize(Role.ADMIN), validateBody(batchSchema), 
   if (body.skipExisting) {
     const existing = await prisma.financialRecord.findMany({
       where: {
+        ...tenantWhere(req),
         type: FinancialType.INCOME,
         competence: body.competence,
         category: body.category,
@@ -196,6 +206,7 @@ router.post("/charges/batch", authorize(Role.ADMIN), validateBody(batchSchema), 
       competence: body.competence,
       batchId,
       fractionId: f.id,
+      condominiumId: req.condominiumId,
       createdById: req.user!.sub,
     }));
 
@@ -224,39 +235,40 @@ router.post("/charges/batch", authorize(Role.ADMIN), validateBody(batchSchema), 
 // ---------------------------------------------------------------------------
 // Resumo financeiro (KPIs do dashboard / página financeiro)
 // ---------------------------------------------------------------------------
-router.get("/summary", authorize(Role.ADMIN), async (_req, res) => {
+router.get("/summary", authorize(Role.ADMIN), async (req, res) => {
   const now = new Date();
   const month = new Date();
   month.setDate(1);
   month.setHours(0, 0, 0, 0);
+  const scope = tenantWhere(req);
 
   const [income, expenses, overdueCount, openAgg, overdueAgg, overdueFractions, unitsCount] =
     await Promise.all([
       prisma.financialRecord.aggregate({
         _sum: { amount: true },
-        where: { type: FinancialType.INCOME, paidDate: { gte: month } },
+        where: { ...scope, type: FinancialType.INCOME, paidDate: { gte: month } },
       }),
       prisma.financialRecord.aggregate({
         _sum: { amount: true },
-        where: { type: FinancialType.EXPENSE, paidDate: { gte: month } },
+        where: { ...scope, type: FinancialType.EXPENSE, paidDate: { gte: month } },
       }),
       prisma.financialRecord.count({
-        where: { type: FinancialType.INCOME, paidDate: null, dueDate: { lt: now } },
+        where: { ...scope, type: FinancialType.INCOME, paidDate: null, dueDate: { lt: now } },
       }),
       prisma.financialRecord.aggregate({
         _sum: { amount: true },
-        where: { type: FinancialType.INCOME, paidDate: null },
+        where: { ...scope, type: FinancialType.INCOME, paidDate: null },
       }),
       prisma.financialRecord.aggregate({
         _sum: { amount: true },
-        where: { type: FinancialType.INCOME, paidDate: null, dueDate: { lt: now } },
+        where: { ...scope, type: FinancialType.INCOME, paidDate: null, dueDate: { lt: now } },
       }),
       prisma.financialRecord.findMany({
-        where: { type: FinancialType.INCOME, paidDate: null, dueDate: { lt: now }, fractionId: { not: null } },
+        where: { ...scope, type: FinancialType.INCOME, paidDate: null, dueDate: { lt: now }, fractionId: { not: null } },
         distinct: ["fractionId"],
         select: { fractionId: true },
       }),
-      prisma.fraction.count({ where: { isActive: true } }),
+      prisma.fraction.count({ where: { ...scope, isActive: true } }),
     ]);
 
   const unitsInArrears = overdueFractions.length;
@@ -277,10 +289,10 @@ router.get("/summary", authorize(Role.ADMIN), async (_req, res) => {
 // ---------------------------------------------------------------------------
 // Inadimplência (agregado por fração)
 // ---------------------------------------------------------------------------
-router.get("/delinquency", authorize(Role.ADMIN), async (_req, res) => {
+router.get("/delinquency", authorize(Role.ADMIN), async (req, res) => {
   const now = new Date();
   const overdue = await prisma.financialRecord.findMany({
-    where: { type: FinancialType.INCOME, paidDate: null, dueDate: { lt: now }, fractionId: { not: null } },
+    where: { ...tenantWhere(req), type: FinancialType.INCOME, paidDate: null, dueDate: { lt: now }, fractionId: { not: null } },
     include: {
       fraction: {
         include: {
@@ -330,7 +342,7 @@ router.get("/fraction/:id/statement", async (req, res) => {
     return res.status(403).json({ error: "Forbidden" });
   }
   const items = await prisma.financialRecord.findMany({
-    where: { fractionId: req.params.id },
+    where: { ...tenantWhere(req), fractionId: req.params.id },
     orderBy: { dueDate: "desc" },
   });
   res.json(items);
@@ -346,12 +358,12 @@ router.get("/report", authorize(Role.ADMIN), async (req, res) => {
   const now = new Date();
 
   const records = await prisma.financialRecord.findMany({
-    where: {
+    where: scopeWhere(req, {
       OR: [
         { dueDate: { gte: start, lte: end } },
         { paidDate: { gte: start, lte: end } },
       ],
-    },
+    }),
     select: { type: true, category: true, amount: true, dueDate: true, paidDate: true },
   });
 
@@ -429,7 +441,7 @@ router.get("/unit/:id/statement", async (req, res) => {
     return res.status(403).json({ error: "Forbidden" });
   }
   const items = await prisma.financialRecord.findMany({
-    where: { fractionId: req.params.id },
+    where: { ...tenantWhere(req), fractionId: req.params.id },
     orderBy: { dueDate: "desc" },
   });
   res.json(items);

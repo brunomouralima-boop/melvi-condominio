@@ -7,9 +7,11 @@ import { Role, DocumentCategory } from "@prisma/client";
 import { prisma } from "../prisma";
 import { config } from "../config";
 import { authenticate, authorize } from "../middleware/auth";
+import { resolveCondominium, tenantWhere } from "../middleware/tenant";
 
 const router = Router();
 router.use(authenticate);
+router.use(resolveCondominium);
 
 // ---------------------------------------------------------------------------
 // Upload (ficheiros em bruto: PDF, Office, imagem, texto)
@@ -59,7 +61,7 @@ function isCategory(v: any): v is DocumentCategory {
 // Listagem
 // ---------------------------------------------------------------------------
 router.get("/", async (req, res) => {
-  const where: any = {};
+  const where: any = { ...tenantWhere(req) };
   if (req.user!.role === Role.RESIDENT) where.visibleToResidents = true;
   if (req.query.category && isCategory(req.query.category)) where.category = req.query.category;
 
@@ -85,7 +87,6 @@ router.post("/", authorize(Role.ADMIN), docUpload.single("file"), async (req, re
     const description = req.body.description ? String(req.body.description) : null;
 
     const saved = await saveDocument(req.file);
-    const condo = await prisma.condominium.findFirst({ select: { id: true } });
 
     const doc = await prisma.document.create({
       data: {
@@ -97,7 +98,7 @@ router.post("/", authorize(Role.ADMIN), docUpload.single("file"), async (req, re
         fileName: saved.fileName,
         fileSize: saved.fileSize,
         mimeType: saved.mimeType,
-        condominiumId: condo?.id ?? null,
+        condominiumId: req.condominiumId ?? null,
         uploadedById: req.user!.sub,
       },
       include: { uploadedBy: { select: { id: true, name: true } } },
@@ -114,6 +115,9 @@ router.post("/", authorize(Role.ADMIN), docUpload.single("file"), async (req, re
 router.put("/:id", authorize(Role.ADMIN), async (req, res) => {
   const existing = await prisma.document.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: "Documento não encontrado" });
+  if (existing.condominiumId && existing.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ error: "Documento não encontrado" });
+  }
 
   const data: any = {};
   if (req.body.title !== undefined) data.title = String(req.body.title);
@@ -135,6 +139,9 @@ router.put("/:id", authorize(Role.ADMIN), async (req, res) => {
 router.delete("/:id", authorize(Role.ADMIN), async (req, res) => {
   const doc = await prisma.document.findUnique({ where: { id: req.params.id } });
   if (!doc) return res.status(404).json({ error: "Documento não encontrado" });
+  if (doc.condominiumId && doc.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ error: "Documento não encontrado" });
+  }
 
   await prisma.document.delete({ where: { id: req.params.id } });
 

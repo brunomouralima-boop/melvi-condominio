@@ -1,4 +1,5 @@
-import { Menu, Building2 } from "lucide-react";
+import { Menu } from "lucide-react";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 
 interface Props {
   /** Texto que aparece à direita do ícone — varia conforme layout (Administrador, Condómino, Porteiro) */
@@ -22,11 +23,8 @@ export function MobileTopbar({ title, onMenuClick }: Props) {
       >
         <Menu className="h-6 w-6" />
       </button>
-      <div className="flex items-center gap-2">
-        <Building2 className="h-5 w-5 text-coral-500" />
-        <div className="font-display font-bold text-brand-900 leading-tight">
-          Melvi <span className="text-coral-500 text-[10px] font-semibold uppercase tracking-wider ml-0.5">Condomínio</span>
-        </div>
+      <div className="flex items-center">
+        <BrandLogo variant="color" className="h-7" />
       </div>
       <div className="ml-auto text-[11px] uppercase tracking-wider text-slate-400">{title}</div>
     </div>

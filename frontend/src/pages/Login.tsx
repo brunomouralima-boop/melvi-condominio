@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Building2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import toast from "react-hot-toast";
@@ -34,12 +34,7 @@ export function LoginPage() {
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
       <div className="hidden lg:flex flex-col justify-between bg-gradient-to-br from-brand-900 via-brand-800 to-brand-950 p-12 text-white">
-        <div className="flex items-center gap-3">
-          <Building2 className="h-9 w-9 text-coral-400" />
-          <div className="font-display text-2xl font-bold leading-none">
-            Melvi <span className="text-coral-300 text-xs font-semibold uppercase tracking-wider ml-1 align-middle">Condomínio</span>
-          </div>
-        </div>
+        <BrandLogo variant="white" className="h-11" />
         <div>
           <h1 className="font-display text-4xl font-bold leading-tight">
             Gestão completa do seu condomínio numa só plataforma.
@@ -53,11 +48,8 @@ export function LoginPage() {
 
       <div className="flex items-center justify-center p-8">
         <form onSubmit={onSubmit} className="w-full max-w-sm space-y-5">
-          <div className="lg:hidden flex items-center justify-center gap-2 mb-6">
-            <Building2 className="h-7 w-7 text-coral-500" />
-            <span className="font-display text-xl font-bold">
-              Melvi <span className="text-coral-500 text-[10px] font-semibold uppercase tracking-wider ml-0.5">Condomínio</span>
-            </span>
+          <div className="lg:hidden flex items-center justify-center mb-6">
+            <BrandLogo variant="color" className="h-9" />
           </div>
           <div>
             <h2 className="font-display text-2xl font-bold text-brand-900">Bem-vindo de volta</h2>

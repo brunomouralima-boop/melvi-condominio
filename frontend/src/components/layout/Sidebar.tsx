@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { LogOut, Building2, ChevronDown, ChevronRight, X } from "lucide-react";
+import { LogOut, ChevronDown, ChevronRight, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import { CondoSwitcher } from "./CondoSwitcher";
 
 export interface SidebarItem {
@@ -63,12 +64,9 @@ export function Sidebar({ items, title, accent = "default", isOpen = false, onCl
         )}
       >
         <div className="flex items-center gap-2 px-6 py-5 border-b border-brand-800">
-          <Building2 className="h-7 w-7 text-coral-400" />
           <div className="flex-1 min-w-0">
-            <div className="font-display text-lg font-bold leading-tight text-white">
-              Melvi <span className="text-coral-400 text-[11px] font-semibold uppercase tracking-wider ml-0.5">Condomínio</span>
-            </div>
-            <div className="text-[11px] uppercase tracking-wider text-slate-400">{title}</div>
+            <BrandLogo variant="white" className="h-8" />
+            <div className="mt-1 text-[11px] uppercase tracking-wider text-slate-400">{title}</div>
           </div>
           {/* Botão fechar (só visível em mobile, quando aberta) */}
           <button

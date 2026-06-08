@@ -51,6 +51,9 @@ async function main() {
     { name: "package", run: () => prisma.package.updateMany({ where: { condominiumId: null }, data: { condominiumId: condo.id } }) },
     { name: "announcement", run: () => prisma.announcement.updateMany({ where: { condominiumId: null }, data: { condominiumId: condo.id } }) },
     { name: "maintenanceOrder", run: () => prisma.maintenanceOrder.updateMany({ where: { condominiumId: null }, data: { condominiumId: condo.id } }) },
+    { name: "supplier", run: () => prisma.supplier.updateMany({ where: { condominiumId: null }, data: { condominiumId: condo.id } }) },
+    { name: "document", run: () => prisma.document.updateMany({ where: { condominiumId: null }, data: { condominiumId: condo.id } }) },
+    { name: "assembly", run: () => prisma.assembly.updateMany({ where: { condominiumId: null }, data: { condominiumId: condo.id } }) },
   ];
   for (const s of steps) {
     const r = await s.run();

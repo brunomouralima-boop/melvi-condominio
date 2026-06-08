@@ -336,6 +336,93 @@ router.get("/fraction/:id/statement", async (req, res) => {
   res.json(items);
 });
 
+// ---------------------------------------------------------------------------
+// Relatório financeiro anual (agregação)
+// ---------------------------------------------------------------------------
+router.get("/report", authorize(Role.ADMIN), async (req, res) => {
+  const year = Number(req.query.year) || new Date().getFullYear();
+  const start = new Date(year, 0, 1, 0, 0, 0, 0);
+  const end = new Date(year, 11, 31, 23, 59, 59, 999);
+  const now = new Date();
+
+  const records = await prisma.financialRecord.findMany({
+    where: {
+      OR: [
+        { dueDate: { gte: start, lte: end } },
+        { paidDate: { gte: start, lte: end } },
+      ],
+    },
+    select: { type: true, category: true, amount: true, dueDate: true, paidDate: true },
+  });
+
+  const months = Array.from({ length: 12 }, (_, i) => ({
+    month: `${year}-${String(i + 1).padStart(2, "0")}`,
+    billed: 0,
+    received: 0,
+    expense: 0,
+    overdue: 0,
+    balance: 0,
+  }));
+  const byCatExp = new Map<string, number>();
+  const byCatInc = new Map<string, number>();
+
+  for (const r of records) {
+    const amt = Number(r.amount);
+    const due = new Date(r.dueDate);
+    const paid = r.paidDate ? new Date(r.paidDate) : null;
+
+    if (r.type === FinancialType.INCOME) {
+      if (due >= start && due <= end) {
+        months[due.getMonth()].billed += amt;
+        if (!paid && due < now) months[due.getMonth()].overdue += amt;
+      }
+      if (paid && paid >= start && paid <= end) {
+        months[paid.getMonth()].received += amt;
+        byCatInc.set(r.category, (byCatInc.get(r.category) ?? 0) + amt);
+      }
+    } else {
+      const ref = paid ?? due;
+      if (ref >= start && ref <= end) {
+        months[ref.getMonth()].expense += amt;
+        byCatExp.set(r.category, (byCatExp.get(r.category) ?? 0) + amt);
+      }
+    }
+  }
+
+  for (const m of months) {
+    m.billed = round2(m.billed);
+    m.received = round2(m.received);
+    m.expense = round2(m.expense);
+    m.overdue = round2(m.overdue);
+    m.balance = round2(m.received - m.expense);
+  }
+
+  const totals = months.reduce(
+    (t, m) => ({
+      billed: round2(t.billed + m.billed),
+      received: round2(t.received + m.received),
+      expense: round2(t.expense + m.expense),
+      overdue: round2(t.overdue + m.overdue),
+    }),
+    { billed: 0, received: 0, expense: 0, overdue: 0 }
+  );
+
+  const byCategoryExpense = Array.from(byCatExp.entries())
+    .map(([category, total]) => ({ category, total: round2(total) }))
+    .sort((a, b) => b.total - a.total);
+  const byCategoryIncome = Array.from(byCatInc.entries())
+    .map(([category, total]) => ({ category, total: round2(total) }))
+    .sort((a, b) => b.total - a.total);
+
+  res.json({
+    year,
+    months,
+    totals: { ...totals, balance: round2(totals.received - totals.expense) },
+    byCategoryExpense,
+    byCategoryIncome,
+  });
+});
+
 // Legacy alias para retrocompatibilidade
 router.get("/unit/:id/statement", async (req, res) => {
   if (req.user!.role === Role.RESIDENT && req.user!.fractionId !== req.params.id) {

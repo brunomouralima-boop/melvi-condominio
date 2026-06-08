@@ -21,6 +21,7 @@ import {
   Fuel,
   Receipt,
   AlertCircle,
+  BarChart3,
 } from "lucide-react";
 import { Sidebar, SidebarEntry } from "./Sidebar";
 import { MobileTopbar } from "./MobileTopbar";
@@ -50,6 +51,7 @@ const entries: SidebarEntry[] = [
     items: [
       { to: "/admin/financial", label: "Lançamentos & Cobranças", icon: Receipt },
       { to: "/admin/delinquency", label: "Inadimplência", icon: AlertCircle },
+      { to: "/admin/financial-reports", label: "Relatórios", icon: BarChart3 },
     ],
   },
   { to: "/admin/packages", label: "Encomendas", icon: Package },

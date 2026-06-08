@@ -143,6 +143,7 @@ model Condominium {
   commonAreas CommonArea[]
   meters      Meter[]
   suppliers   Supplier[]
+  documents   Document[]
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 }
@@ -258,6 +259,7 @@ model User {
   visitsAuthorized      Visit[]      @relation("VisitAuthorizer")
   visitsExitRegistered  Visit[]      @relation("VisitExitRegistrar")
   maintenanceCreated    MaintenanceOrder[] @relation("MaintenanceCreator")
+  documentsUploaded     Document[]   @relation("DocumentUploader")
 }
 
 model RefreshToken {
@@ -658,4 +660,40 @@ model MaintenanceOrder {
   @@index([status])
   @@index([kind])
   @@index([nextDueDate])
+}
+
+// ---------------------------------------------------------------------------
+// Documentos: repositório (atas, regulamento, contratos, financeiro)
+// ---------------------------------------------------------------------------
+enum DocumentCategory {
+  MINUTES      // Atas de assembleia
+  REGULATION   // Regulamento
+  CONTRACT     // Contratos
+  FINANCIAL    // Documentos financeiros / orçamentos
+  CIRCULAR     // Comunicados / circulares
+  OTHER
+}
+
+model Document {
+  id                 String           @id @default(uuid())
+  title              String
+  description        String?
+  category           DocumentCategory @default(OTHER)
+  fileUrl            String
+  fileName           String?
+  fileSize           Int?
+  mimeType           String?
+  visibleToResidents Boolean          @default(true)
+
+  condominiumId      String?
+  condominium        Condominium?     @relation(fields: [condominiumId], references: [id])
+
+  uploadedById       String
+  uploadedBy         User             @relation("DocumentUploader", fields: [uploadedById], references: [id])
+
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@index([category])
+  @@index([visibleToResidents])
 }

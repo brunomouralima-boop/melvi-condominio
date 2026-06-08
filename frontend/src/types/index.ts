@@ -327,3 +327,20 @@ export interface MaintenanceStats {
   doneMonth: number;
   preventiveDue: number;
 }
+
+// ─────────── Documentos ───────────
+export type DocumentCategory = "MINUTES" | "REGULATION" | "CONTRACT" | "FINANCIAL" | "CIRCULAR" | "OTHER";
+
+export interface DocumentItem {
+  id: string;
+  title: string;
+  description?: string | null;
+  category: DocumentCategory;
+  fileUrl: string;
+  fileName?: string | null;
+  fileSize?: number | null;
+  mimeType?: string | null;
+  visibleToResidents: boolean;
+  uploadedBy?: { id: string; name: string };
+  createdAt: string;
+}

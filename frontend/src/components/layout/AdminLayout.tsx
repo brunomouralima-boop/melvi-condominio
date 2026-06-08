@@ -26,6 +26,7 @@ import {
   ClipboardList,
   Truck,
   CalendarClock,
+  FolderOpen,
 } from "lucide-react";
 import { Sidebar, SidebarEntry } from "./Sidebar";
 import { MobileTopbar } from "./MobileTopbar";
@@ -48,6 +49,7 @@ const entries: SidebarEntry[] = [
   { to: "/admin/access", label: "Controlo de Acesso", icon: ShieldCheck },
   { to: "/admin/visits", label: "Visitas", icon: Users },
   { to: "/admin/announcements", label: "Comunicados", icon: Megaphone },
+  { to: "/admin/documents", label: "Documentos", icon: FolderOpen },
   { to: "/admin/common-areas", label: "Áreas Comuns", icon: Calendar },
   {
     label: "Financeiro",

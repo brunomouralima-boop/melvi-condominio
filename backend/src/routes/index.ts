@@ -22,6 +22,7 @@ import financial from "./financial";
 import maintenance from "./maintenance";
 import packages from "./packages";
 import notifications from "./notifications";
+import documents from "./documents";
 import uploads from "./uploads";
 
 const router = Router();
@@ -49,6 +50,7 @@ router.use("/financial", financial);
 router.use("/maintenance", maintenance);
 router.use("/packages", packages);
 router.use("/notifications", notifications);
+router.use("/documents", documents);
 router.use("/uploads", uploads);
 
 export default router;

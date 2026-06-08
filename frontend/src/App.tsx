@@ -27,6 +27,8 @@ import { AdminReports } from "@/pages/admin/Reports";
 import { AdminMaintenance } from "@/pages/admin/Maintenance";
 import { AdminPreventiveMaintenance } from "@/pages/admin/PreventiveMaintenance";
 import { AdminSuppliers } from "@/pages/admin/Suppliers";
+import { AdminDocuments } from "@/pages/admin/Documents";
+import { ResidentDocuments } from "@/pages/resident/Documents";
 import { AdminSettings } from "@/pages/admin/Settings";
 import { AdminCondominium } from "@/pages/admin/Condominium";
 import { AdminTowers } from "@/pages/admin/Towers";
@@ -91,6 +93,7 @@ export default function App() {
                 <Route path="access" element={<AdminAccessLogs />} />
                 <Route path="visits" element={<VisitsHistoryPage />} />
                 <Route path="announcements" element={<AdminAnnouncements />} />
+                <Route path="documents" element={<AdminDocuments />} />
                 <Route path="common-areas" element={<AdminCommonAreas />} />
                 <Route path="financial" element={<AdminFinancial />} />
                 <Route path="delinquency" element={<AdminDelinquency />} />
@@ -118,6 +121,7 @@ export default function App() {
                 <Route path="dependents" element={<ResidentDependents />} />
                 <Route path="employees" element={<ResidentEmployees />} />
                 <Route path="vehicles" element={<ResidentVehicles />} />
+                <Route path="documents" element={<ResidentDocuments />} />
                 <Route path="info" element={<ResidentInfo />} />
                 <Route path="financial" element={<ResidentFinancial />} />
                 <Route path="reservations" element={<ResidentReservations />} />

@@ -10,6 +10,7 @@ import meters from "./meters";
 import dependents from "./dependents";
 import domesticEmployees from "./domesticEmployees";
 import vehicles from "./vehicles";
+import pets from "./pets";
 import qrCodes from "./qrCodes";
 import accessLogs from "./accessLogs";
 import visits from "./visits";
@@ -39,6 +40,7 @@ router.use("/units", units); // legacy alias
 router.use("/dependents", dependents);
 router.use("/domestic-employees", domesticEmployees);
 router.use("/vehicles", vehicles);
+router.use("/pets", pets);
 router.use("/qr-codes", qrCodes);
 router.use("/access-logs", accessLogs);
 router.use("/visits", visits);

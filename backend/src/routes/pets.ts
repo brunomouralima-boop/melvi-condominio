@@ -1,0 +1,64 @@
+import { Router } from "express";
+import { z } from "zod";
+import { Role } from "@prisma/client";
+import { prisma } from "../prisma";
+import { authenticate } from "../middleware/auth";
+import { validateBody } from "../middleware/validate";
+
+const router = Router();
+router.use(authenticate);
+
+router.get("/", async (req, res) => {
+  const where = req.user!.role === Role.ADMIN ? {} : { userId: req.user!.sub };
+  const items = await prisma.pet.findMany({
+    where,
+    include: { user: { select: { id: true, name: true, fractionId: true } } },
+    orderBy: { createdAt: "desc" },
+  });
+  res.json(items);
+});
+
+const createSchema = z.object({
+  name: z.string().min(1),
+  species: z.string().min(1),
+  breed: z.string().optional().nullable(),
+  photo: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+});
+
+router.post("/", validateBody(createSchema), async (req, res) => {
+  const body = req.body as z.infer<typeof createSchema>;
+  const pet = await prisma.pet.create({
+    data: {
+      name: body.name,
+      species: body.species,
+      breed: body.breed || null,
+      photo: body.photo || null,
+      notes: body.notes || null,
+      userId: req.user!.sub,
+    },
+  });
+  res.status(201).json(pet);
+});
+
+router.put("/:id", async (req, res) => {
+  const pet = await prisma.pet.findUnique({ where: { id: req.params.id } });
+  if (!pet) return res.status(404).json({ error: "Not found" });
+  if (req.user!.role !== Role.ADMIN && pet.userId !== req.user!.sub) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  const updated = await prisma.pet.update({ where: { id: req.params.id }, data: req.body });
+  res.json(updated);
+});
+
+router.delete("/:id", async (req, res) => {
+  const pet = await prisma.pet.findUnique({ where: { id: req.params.id } });
+  if (!pet) return res.status(404).json({ error: "Not found" });
+  if (req.user!.role !== Role.ADMIN && pet.userId !== req.user!.sub) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  await prisma.pet.delete({ where: { id: req.params.id } });
+  res.json({ ok: true });
+});
+
+export default router;

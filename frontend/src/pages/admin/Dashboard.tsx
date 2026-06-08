@@ -1,10 +1,19 @@
 import { useQuery } from "@tanstack/react-query";
-import { Building, Users, AlertTriangle, Siren, ShieldCheck } from "lucide-react";
+import { Building, Users, AlertTriangle, Siren, ShieldCheck, TrendingUp, TrendingDown, Wallet, Percent } from "lucide-react";
 import { PieChart, Pie, Cell, LineChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from "recharts";
 import { api } from "@/lib/api";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import type { AdminStats, AccessLog } from "@/types";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatCurrency } from "@/lib/utils";
+
+interface FinSummary {
+  monthIncome: number;
+  monthExpenses: number;
+  totalOpen: number;
+  overdueAmount: number;
+  delinquencyRate: number;
+  unitsInArrears: number;
+}
 
 const COLORS = ["#FF6B6B", "#0F172A", "#F59E0B", "#10B981", "#6366F1"];
 
@@ -25,6 +34,10 @@ export function AdminDashboard() {
     queryKey: ["recent-access-logs"],
     queryFn: () => api.get<AccessLog[]>("/access-logs").then((r) => r.data),
   });
+  const { data: fin } = useQuery({
+    queryKey: ["financial-summary"],
+    queryFn: () => api.get<FinSummary>("/financial/summary").then((r) => r.data),
+  });
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
@@ -44,6 +57,18 @@ export function AdminDashboard() {
           value={stats?.activePanic ?? 0}
           variant={stats?.activePanic ? "danger" : "default"}
         />
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Stat icon={TrendingUp} label="Receita do mês" value={formatCurrency(fin?.monthIncome ?? 0)} />
+        <Stat icon={TrendingDown} label="Despesas do mês" value={formatCurrency(fin?.monthExpenses ?? 0)} />
+        <Stat
+          icon={Wallet}
+          label={`Em dívida${fin?.unitsInArrears ? ` · ${fin.unitsInArrears} un.` : ""}`}
+          value={formatCurrency(fin?.overdueAmount ?? 0)}
+          variant={(fin?.overdueAmount ?? 0) > 0 ? "danger" : "default"}
+        />
+        <Stat icon={Percent} label="Inadimplência" value={`${(fin?.delinquencyRate ?? 0).toFixed(1)}%`} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">

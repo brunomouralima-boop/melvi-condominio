@@ -12,6 +12,7 @@ import {
   Calendar,
   FolderOpen,
   Vote,
+  PawPrint,
 } from "lucide-react";
 import { Sidebar, SidebarEntry } from "./Sidebar";
 import { MobileTopbar } from "./MobileTopbar";
@@ -24,6 +25,7 @@ const items: SidebarEntry[] = [
   { to: "/resident/dependents", label: "Dependentes", icon: Users },
   { to: "/resident/employees", label: "Funcionários", icon: Briefcase },
   { to: "/resident/vehicles", label: "Viaturas", icon: Car },
+  { to: "/resident/pets", label: "Animais", icon: PawPrint },
   { to: "/resident/documents", label: "Documentos", icon: FolderOpen },
   { to: "/resident/info", label: "Informações", icon: Info },
   { to: "/resident/financial", label: "Financeiro", icon: Wallet },

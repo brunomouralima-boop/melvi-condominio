@@ -245,6 +245,7 @@ model User {
   dependents          Dependent[]
   domesticEmployees   DomesticEmployee[]
   vehicles            Vehicle[]
+  pets                Pet[]
   occurrencesCreated  Occurrence[]   @relation("OccurrenceCreator")
   occurrencesAssigned Occurrence[]   @relation("OccurrenceAssignee")
   panicAlerts         PanicAlert[]   @relation("PanicTriggered")
@@ -790,4 +791,21 @@ model Vote {
 
   @@unique([agendaItemId, fractionId]) // 1 voto por fração por ponto
   @@index([agendaItemId])
+}
+
+// ---------------------------------------------------------------------------
+// Animais de estimação (registados pelo condómino)
+// ---------------------------------------------------------------------------
+model Pet {
+  id        String   @id @default(uuid())
+  name      String
+  species   String   // ex.: Cão, Gato
+  breed     String?
+  photo     String?
+  notes     String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }

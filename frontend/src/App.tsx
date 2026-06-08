@@ -33,6 +33,7 @@ import { AdminAssemblies } from "@/pages/admin/Assemblies";
 import { AdminAssemblyDetail } from "@/pages/admin/AssemblyDetail";
 import { ResidentAssemblies } from "@/pages/resident/Assemblies";
 import { ResidentAssemblyDetail } from "@/pages/resident/AssemblyDetail";
+import { ResidentPets } from "@/pages/resident/Pets";
 import { AdminSettings } from "@/pages/admin/Settings";
 import { AdminCondominium } from "@/pages/admin/Condominium";
 import { AdminTowers } from "@/pages/admin/Towers";
@@ -52,6 +53,7 @@ import { ResidentReservations } from "@/pages/resident/Reservations";
 import { ResidentVisits } from "@/pages/resident/Visits";
 
 import { DoormanDashboard } from "@/pages/doorman/Dashboard";
+import { CommandPalette } from "@/components/CommandPalette";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -73,6 +75,7 @@ export default function App() {
         <AuthProvider>
           <SocketProvider>
             <Toaster position="top-right" />
+            <CommandPalette />
             <Routes>
               <Route path="/" element={<RootRedirect />} />
               <Route path="/login" element={<LoginPage />} />
@@ -127,6 +130,7 @@ export default function App() {
                 <Route path="dependents" element={<ResidentDependents />} />
                 <Route path="employees" element={<ResidentEmployees />} />
                 <Route path="vehicles" element={<ResidentVehicles />} />
+                <Route path="pets" element={<ResidentPets />} />
                 <Route path="documents" element={<ResidentDocuments />} />
                 <Route path="assemblies" element={<ResidentAssemblies />} />
                 <Route path="assemblies/:id" element={<ResidentAssemblyDetail />} />

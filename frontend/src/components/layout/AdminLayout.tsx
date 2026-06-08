@@ -22,6 +22,10 @@ import {
   Receipt,
   AlertCircle,
   BarChart3,
+  Wrench,
+  ClipboardList,
+  Truck,
+  CalendarClock,
 } from "lucide-react";
 import { Sidebar, SidebarEntry } from "./Sidebar";
 import { MobileTopbar } from "./MobileTopbar";
@@ -55,6 +59,15 @@ const entries: SidebarEntry[] = [
     ],
   },
   { to: "/admin/packages", label: "Encomendas", icon: Package },
+  {
+    label: "Manutenção",
+    icon: Wrench,
+    items: [
+      { to: "/admin/maintenance", label: "Ordens", icon: ClipboardList, end: true },
+      { to: "/admin/maintenance/preventive", label: "Preventiva", icon: CalendarClock },
+      { to: "/admin/maintenance/suppliers", label: "Fornecedores", icon: Truck },
+    ],
+  },
   {
     label: "Medidores",
     icon: Gauge,

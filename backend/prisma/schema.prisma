@@ -142,6 +142,7 @@ model Condominium {
   towers      Tower[]
   commonAreas CommonArea[]
   meters      Meter[]
+  suppliers   Supplier[]
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 }
@@ -156,6 +157,7 @@ model Tower {
   condominium   Condominium @relation(fields: [condominiumId], references: [id], onDelete: Cascade)
   fractions     Fraction[]
   meters        Meter[]
+  maintenanceOrders MaintenanceOrder[]
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
@@ -207,6 +209,7 @@ model Fraction {
   reservations    Reservation[]
   packages        Package[]
   financialRecords FinancialRecord[]
+  maintenanceOrders MaintenanceOrder[]
 
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
@@ -254,6 +257,7 @@ model User {
   refreshTokens       RefreshToken[]
   visitsAuthorized      Visit[]      @relation("VisitAuthorizer")
   visitsExitRegistered  Visit[]      @relation("VisitExitRegistrar")
+  maintenanceCreated    MaintenanceOrder[] @relation("MaintenanceCreator")
 }
 
 model RefreshToken {
@@ -565,4 +569,93 @@ model Visit {
   @@index([status])
   @@index([fractionId, status])
   @@index([entryAt])
+}
+
+// ---------------------------------------------------------------------------
+// Manutenção: fornecedores + ordens (corretivas e preventivas)
+// ---------------------------------------------------------------------------
+enum MaintenanceKind {
+  CORRECTIVE
+  PREVENTIVE
+}
+
+enum MaintenanceStatus {
+  OPEN
+  SCHEDULED
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+enum MaintenancePriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum MaintenanceFrequency {
+  NONE
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  SEMIANNUAL
+  ANNUAL
+}
+
+model Supplier {
+  id            String       @id @default(uuid())
+  name          String
+  category      String?      // tipo de serviço (ex.: Elevadores, Limpeza)
+  contactName   String?
+  phone         String?
+  email         String?
+  taxId         String?      // NIF
+  notes         String?
+  isActive      Boolean      @default(true)
+
+  condominiumId String?
+  condominium   Condominium? @relation(fields: [condominiumId], references: [id])
+
+  orders        MaintenanceOrder[]
+
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([isActive])
+}
+
+model MaintenanceOrder {
+  id            String               @id @default(uuid())
+  title         String
+  description   String?
+  kind          MaintenanceKind      @default(CORRECTIVE)
+  status        MaintenanceStatus    @default(OPEN)
+  priority      MaintenancePriority  @default(MEDIUM)
+  category      String?
+  cost          Decimal?             @db.Decimal(12, 2)
+
+  // Preventiva: periodicidade + próxima data prevista
+  frequency     MaintenanceFrequency @default(NONE)
+  scheduledDate DateTime?
+  nextDueDate   DateTime?
+  completedDate DateTime?
+
+  supplierId    String?
+  supplier      Supplier?            @relation(fields: [supplierId], references: [id])
+
+  towerId       String?
+  tower         Tower?               @relation(fields: [towerId], references: [id])
+  fractionId    String?
+  fraction      Fraction?            @relation(fields: [fractionId], references: [id])
+
+  createdById   String
+  createdBy     User                 @relation("MaintenanceCreator", fields: [createdById], references: [id])
+
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  @@index([status])
+  @@index([kind])
+  @@index([nextDueDate])
 }

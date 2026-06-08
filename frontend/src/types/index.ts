@@ -277,3 +277,53 @@ export interface MeterReading {
   registeredBy?: { id: string; name: string };
   createdAt: string;
 }
+
+// ─────────── Manutenção ───────────
+export type MaintKind = "CORRECTIVE" | "PREVENTIVE";
+export type MaintStatus = "OPEN" | "SCHEDULED" | "IN_PROGRESS" | "DONE" | "CANCELLED";
+export type MaintPriority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+export type MaintFrequency = "NONE" | "WEEKLY" | "MONTHLY" | "QUARTERLY" | "SEMIANNUAL" | "ANNUAL";
+
+export interface Supplier {
+  id: string;
+  name: string;
+  category?: string | null;
+  contactName?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  taxId?: string | null;
+  notes?: string | null;
+  isActive: boolean;
+  _count?: { orders: number };
+  createdAt: string;
+}
+
+export interface MaintenanceOrder {
+  id: string;
+  title: string;
+  description?: string | null;
+  kind: MaintKind;
+  status: MaintStatus;
+  priority: MaintPriority;
+  category?: string | null;
+  cost?: string | number | null;
+  frequency: MaintFrequency;
+  scheduledDate?: string | null;
+  nextDueDate?: string | null;
+  completedDate?: string | null;
+  supplierId?: string | null;
+  supplier?: { id: string; name: string; phone?: string | null } | null;
+  towerId?: string | null;
+  tower?: { id: string; name: string } | null;
+  fractionId?: string | null;
+  fraction?: { id: string; identifier: string } | null;
+  createdAt: string;
+}
+
+export interface MaintenanceStats {
+  open: number;
+  inProgress: number;
+  scheduled: number;
+  doneMonth: number;
+  preventiveDue: number;
+}

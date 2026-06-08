@@ -24,6 +24,9 @@ import { AdminCommonAreas } from "@/pages/admin/CommonAreas";
 import { AdminFinancial } from "@/pages/admin/Financial";
 import { AdminDelinquency } from "@/pages/admin/Delinquency";
 import { AdminReports } from "@/pages/admin/Reports";
+import { AdminMaintenance } from "@/pages/admin/Maintenance";
+import { AdminPreventiveMaintenance } from "@/pages/admin/PreventiveMaintenance";
+import { AdminSuppliers } from "@/pages/admin/Suppliers";
 import { AdminSettings } from "@/pages/admin/Settings";
 import { AdminCondominium } from "@/pages/admin/Condominium";
 import { AdminTowers } from "@/pages/admin/Towers";
@@ -93,6 +96,9 @@ export default function App() {
                 <Route path="delinquency" element={<AdminDelinquency />} />
                 <Route path="financial-reports" element={<AdminReports />} />
                 <Route path="packages" element={<PackagesPage />} />
+                <Route path="maintenance" element={<AdminMaintenance />} />
+                <Route path="maintenance/preventive" element={<AdminPreventiveMaintenance />} />
+                <Route path="maintenance/suppliers" element={<AdminSuppliers />} />
                 <Route path="meters" element={<Navigate to="/admin/meters/water" replace />} />
                 <Route path="meters/:type" element={<AdminMeters />} />
                 <Route path="settings" element={<AdminSettings />} />

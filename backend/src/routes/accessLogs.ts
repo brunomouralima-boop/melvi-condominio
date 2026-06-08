@@ -3,11 +3,13 @@ import { z } from "zod";
 import { Role, AccessLogType, AccessMethod } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate, authorize } from "../middleware/auth";
+import { resolveCondominium, tenantWhere } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 import { emitToRole } from "../sockets";
 
 const router = Router();
 router.use(authenticate);
+router.use(resolveCondominium);
 
 router.get("/", async (req, res) => {
   const { date, fractionId, unitId, type } = req.query as {
@@ -18,7 +20,7 @@ router.get("/", async (req, res) => {
   };
   const effectiveFractionId = fractionId ?? unitId; // legacy alias
 
-  const where: any = {};
+  const where: any = { ...tenantWhere(req) };
   if (req.user!.role === Role.RESIDENT) where.fractionId = req.user!.fractionId;
   if (effectiveFractionId) where.fractionId = effectiveFractionId;
   if (type) where.type = type;
@@ -58,6 +60,7 @@ router.post("/", authorize(Role.DOORMAN, Role.ADMIN), validateBody(createSchema)
       personName: body.personName,
       personDocument: body.personDocument ?? null,
       fractionId: body.fractionId ?? null,
+      condominiumId: req.condominiumId,
       notes: body.notes ?? null,
       method: AccessMethod.MANUAL,
       registeredById: req.user!.sub,

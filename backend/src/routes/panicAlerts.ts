@@ -3,14 +3,16 @@ import { z } from "zod";
 import { Role, PanicStatus } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate, authorize } from "../middleware/auth";
+import { resolveCondominium, tenantWhere } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 import { emitToRole, emitToUser } from "../sockets";
 
 const router = Router();
 router.use(authenticate);
+router.use(resolveCondominium);
 
 router.get("/", async (req, res) => {
-  const where: any = {};
+  const where: any = { ...tenantWhere(req) };
   if (req.user!.role === Role.RESIDENT) where.triggeredById = req.user!.sub;
   const { status } = req.query as { status?: PanicStatus };
   if (status) where.status = status;
@@ -40,6 +42,7 @@ router.post("/", authorize(Role.RESIDENT), validateBody(createSchema), async (re
     data: {
       description,
       fractionId: req.user!.fractionId,
+      condominiumId: req.condominiumId,
       triggeredById: req.user!.sub,
     },
     include: {
@@ -49,7 +52,7 @@ router.post("/", authorize(Role.RESIDENT), validateBody(createSchema), async (re
   });
 
   const recipients = await prisma.user.findMany({
-    where: { role: { in: [Role.ADMIN, Role.DOORMAN] }, isActive: true },
+    where: { isActive: true, memberships: { some: { condominiumId: req.condominiumId, role: { in: [Role.ADMIN, Role.DOORMAN] } } } },
     select: { id: true },
   });
   await prisma.notification.createMany({
@@ -82,6 +85,7 @@ router.post("/", authorize(Role.RESIDENT), validateBody(createSchema), async (re
 router.put("/:id/acknowledge", authorize(Role.DOORMAN, Role.ADMIN), async (req, res) => {
   const alert = await prisma.panicAlert.findUnique({ where: { id: req.params.id } });
   if (!alert) return res.status(404).json({ error: "Not found" });
+  if (alert.condominiumId && alert.condominiumId !== req.condominiumId) return res.status(404).json({ error: "Not found" });
   if (alert.status !== PanicStatus.ACTIVE) {
     return res.status(400).json({ error: "Alert already acknowledged or resolved" });
   }
@@ -112,6 +116,7 @@ router.put("/:id/acknowledge", authorize(Role.DOORMAN, Role.ADMIN), async (req, 
 router.put("/:id/resolve", authorize(Role.ADMIN), async (req, res) => {
   const alert = await prisma.panicAlert.findUnique({ where: { id: req.params.id } });
   if (!alert) return res.status(404).json({ error: "Not found" });
+  if (alert.condominiumId && alert.condominiumId !== req.condominiumId) return res.status(404).json({ error: "Not found" });
   const updated = await prisma.panicAlert.update({
     where: { id: req.params.id },
     data: { status: PanicStatus.RESOLVED, resolvedAt: new Date() },

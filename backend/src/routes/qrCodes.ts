@@ -5,6 +5,7 @@ import rateLimit from "express-rate-limit";
 import { Role, QRAccessType, AccessLogType, AccessMethod } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate, authorize } from "../middleware/auth";
+import { resolveCondominium, tenantWhere } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 import { signQR, verifyQR, generateQRImage, generateShortCode } from "../utils/qr";
 import { verifyAccessToken } from "../utils/jwt";
@@ -60,9 +61,11 @@ router.get("/:id/image", async (req, res) => {
 
 // A partir daqui todas as rotas exigem auth JWT no header
 router.use(authenticate);
+router.use(resolveCondominium);
 
 router.get("/", async (req, res) => {
-  const where = req.user!.role === Role.RESIDENT ? { createdById: req.user!.sub } : {};
+  const where: any = { ...tenantWhere(req) };
+  if (req.user!.role === Role.RESIDENT) where.createdById = req.user!.sub;
   const items = await prisma.qRAccessCode.findMany({
     where,
     include: {
@@ -130,6 +133,7 @@ router.post("/", validateBody(createSchema), async (req, res) => {
       maxUses: body.maxUses,
       qrCodeData,
       shortCode,
+      condominiumId: req.condominiumId,
       createdById: req.user!.sub,
       fractionId: req.user!.fractionId,
     },
@@ -142,6 +146,9 @@ router.post("/", validateBody(createSchema), async (req, res) => {
 router.put("/:id/deactivate", async (req, res) => {
   const qr = await prisma.qRAccessCode.findUnique({ where: { id: req.params.id } });
   if (!qr) return res.status(404).json({ error: "Not found" });
+  if (qr.condominiumId && qr.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ error: "Not found" });
+  }
   if (req.user!.role === Role.RESIDENT && qr.createdById !== req.user!.sub) {
     return res.status(403).json({ error: "Forbidden" });
   }
@@ -194,6 +201,9 @@ router.post("/validate", validateLimiter, authorize(Role.DOORMAN, Role.ADMIN), v
     },
   });
   if (!qr) return res.status(404).json({ valid: false, reason: "QR não encontrado" });
+  if (qr.condominiumId && qr.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ valid: false, reason: "Código não pertence a este condomínio" });
+  }
 
   const now = new Date();
   if (!qr.isActive) return res.json({ valid: false, reason: "Acesso desativado pelo residente", qr });
@@ -212,6 +222,7 @@ router.post("/validate", validateLimiter, authorize(Role.DOORMAN, Role.ADMIN), v
         personName: qr.guestName,
         personDocument: qr.guestDocument,
         fractionId: qr.fractionId,
+        condominiumId: qr.condominiumId ?? req.condominiumId,
         qrCodeId: qr.id,
         method: qrCodeData ? AccessMethod.QR : AccessMethod.MANUAL,
         registeredById: req.user!.sub,
@@ -227,6 +238,7 @@ router.post("/validate", validateLimiter, authorize(Role.DOORMAN, Role.ADMIN), v
         status: "INSIDE",
         entryAt,
         fractionId: qr.fractionId,
+        condominiumId: qr.condominiumId ?? req.condominiumId,
         qrCodeId: qr.id,
         authorizedById: req.user!.sub,
         notes: `Entrada via ${qrCodeData ? "QR Code" : "código manual"} — ${qr.type}`,

@@ -3,14 +3,16 @@ import { z } from "zod";
 import { Role, PackageStatus } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate, authorize } from "../middleware/auth";
+import { resolveCondominium, tenantWhere } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 import { emitToUser } from "../sockets";
 
 const router = Router();
 router.use(authenticate);
+router.use(resolveCondominium);
 
 router.get("/", async (req, res) => {
-  const where: any = {};
+  const where: any = { ...tenantWhere(req) };
   if (req.user!.role === Role.RESIDENT) where.fractionId = req.user!.fractionId;
   const items = await prisma.package.findMany({
     where,
@@ -37,7 +39,7 @@ router.post("/", authorize(Role.DOORMAN, Role.ADMIN), validateBody(createSchema)
   const fractionId = body.fractionId ?? body.unitId;
   if (!fractionId) return res.status(400).json({ error: "fractionId required" });
   const item = await prisma.package.create({
-    data: { description: body.description, sender: body.sender, fractionId, receivedById: req.user!.sub },
+    data: { description: body.description, sender: body.sender, fractionId, condominiumId: req.condominiumId, receivedById: req.user!.sub },
     include: { fraction: { include: { residents: { select: { id: true } } } } },
   });
   for (const r of item.fraction.residents) {
@@ -56,6 +58,11 @@ router.post("/", authorize(Role.DOORMAN, Role.ADMIN), validateBody(createSchema)
 });
 
 router.put("/:id/deliver", authorize(Role.DOORMAN, Role.ADMIN), async (req, res) => {
+  const existing = await prisma.package.findUnique({ where: { id: req.params.id }, select: { condominiumId: true } });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  if (existing.condominiumId && existing.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ error: "Not found" });
+  }
   const updated = await prisma.package.update({
     where: { id: req.params.id },
     data: { status: PackageStatus.DELIVERED, deliveredAt: new Date() },

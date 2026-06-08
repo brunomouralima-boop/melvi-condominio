@@ -3,14 +3,17 @@ import { z } from "zod";
 import { Role, AnnouncementType } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate, authorize } from "../middleware/auth";
+import { resolveCondominium, tenantWhere } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 import { emitToRole } from "../sockets";
 
 const router = Router();
 router.use(authenticate);
+router.use(resolveCondominium);
 
-router.get("/", async (_req, res) => {
+router.get("/", async (req, res) => {
   const items = await prisma.announcement.findMany({
+    where: tenantWhere(req),
     include: { createdBy: { select: { id: true, name: true } } },
     orderBy: [{ isPinned: "desc" }, { createdAt: "desc" }],
   });
@@ -34,12 +37,16 @@ router.post("/", authorize(Role.ADMIN), validateBody(createSchema), async (req, 
       type: body.type ?? AnnouncementType.INFO,
       isPinned: body.isPinned ?? false,
       attachments: body.attachments ?? [],
+      condominiumId: req.condominiumId,
       createdById: req.user!.sub,
     },
     include: { createdBy: { select: { id: true, name: true } } },
   });
-  // Push notification to all residents
-  const residents = await prisma.user.findMany({ where: { role: Role.RESIDENT, isActive: true }, select: { id: true } });
+  // Push notification aos residentes do condomínio
+  const residents = await prisma.user.findMany({
+    where: { isActive: true, memberships: { some: { condominiumId: req.condominiumId, role: Role.RESIDENT } } },
+    select: { id: true },
+  });
   await prisma.notification.createMany({
     data: residents.map((r) => ({
       userId: r.id,
@@ -53,7 +60,15 @@ router.post("/", authorize(Role.ADMIN), validateBody(createSchema), async (req, 
   res.status(201).json(item);
 });
 
+async function assertSameCondo(req: any, res: any): Promise<boolean> {
+  const existing = await prisma.announcement.findUnique({ where: { id: req.params.id }, select: { condominiumId: true } });
+  if (!existing) { res.status(404).json({ error: "Not found" }); return false; }
+  if (existing.condominiumId && existing.condominiumId !== req.condominiumId) { res.status(404).json({ error: "Not found" }); return false; }
+  return true;
+}
+
 router.put("/:id", authorize(Role.ADMIN), async (req, res) => {
+  if (!(await assertSameCondo(req, res))) return;
   const item = await prisma.announcement.update({
     where: { id: req.params.id },
     data: req.body,
@@ -62,6 +77,7 @@ router.put("/:id", authorize(Role.ADMIN), async (req, res) => {
 });
 
 router.delete("/:id", authorize(Role.ADMIN), async (req, res) => {
+  if (!(await assertSameCondo(req, res))) return;
   await prisma.announcement.delete({ where: { id: req.params.id } });
   res.json({ ok: true });
 });

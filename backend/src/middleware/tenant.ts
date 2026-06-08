@@ -82,6 +82,23 @@ export function tenantWhere(req: Request): Record<string, unknown> {
   return { OR: [{ condominiumId: req.condominiumId }, { condominiumId: null }] };
 }
 
+/**
+ * Aplica scoping de condomínio a um objecto `where` já existente, compondo
+ * com `AND` quando o where já usa `OR` (ex.: filtros de data), para não
+ * haver colisão de chaves `OR`.
+ */
+export function scopeWhere<T extends Record<string, any>>(req: Request, where: T): T {
+  if (!req.condominiumId) return where;
+  const w = where as Record<string, any>;
+  const clause = { OR: [{ condominiumId: req.condominiumId }, { condominiumId: null }] };
+  if (w.OR !== undefined || w.AND !== undefined) {
+    w.AND = [...(Array.isArray(w.AND) ? w.AND : w.AND ? [w.AND] : []), clause];
+  } else {
+    Object.assign(w, clause);
+  }
+  return where;
+}
+
 /** Garante que há um condomínio activo (para escritas). */
 export function requireCondominium(req: Request, res: Response, next: NextFunction) {
   if (!req.condominiumId) {

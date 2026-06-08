@@ -3,11 +3,13 @@ import { z } from "zod";
 import { Role, VisitStatus } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate, authorize } from "../middleware/auth";
+import { resolveCondominium, scopeWhere } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 import { emitToRole, emitToUser } from "../sockets";
 
 const router = Router();
 router.use(authenticate);
+router.use(resolveCondominium);
 
 /**
  * GET /api/visits
@@ -49,7 +51,7 @@ router.get("/", async (req, res) => {
   }
 
   const visits = await prisma.visit.findMany({
-    where,
+    where: scopeWhere(req, where),
     include: {
       fraction: { include: { tower: true } },
       authorizedBy: { select: { id: true, name: true } },
@@ -68,8 +70,8 @@ router.get("/", async (req, res) => {
  * Devolve { count: N } — visitantes actualmente DENTRO do condomínio.
  * Usado por badges/contadores em tempo real.
  */
-router.get("/active/count", async (_req, res) => {
-  const count = await prisma.visit.count({ where: { status: "INSIDE" } });
+router.get("/active/count", async (req, res) => {
+  const count = await prisma.visit.count({ where: scopeWhere(req, { status: VisitStatus.INSIDE }) });
   res.json({ count });
 });
 
@@ -87,6 +89,9 @@ router.get("/:id", async (req, res) => {
     },
   });
   if (!visit) return res.status(404).json({ error: "Not found" });
+  if (visit.condominiumId && visit.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ error: "Not found" });
+  }
 
   if (req.user!.role === Role.RESIDENT && visit.fractionId !== req.user!.fractionId) {
     return res.status(403).json({ error: "Forbidden" });
@@ -113,6 +118,9 @@ router.post(
 
     const visit = await prisma.visit.findUnique({ where: { id: req.params.id } });
     if (!visit) return res.status(404).json({ error: "Visita não encontrada" });
+    if (visit.condominiumId && visit.condominiumId !== req.condominiumId) {
+      return res.status(404).json({ error: "Visita não encontrada" });
+    }
     if (visit.status !== "INSIDE") {
       return res.status(400).json({
         error: `Não é possível registar saída — visita está em estado ${visit.status}`,
@@ -149,6 +157,7 @@ router.post(
           personName: visit.guestName,
           personDocument: visit.guestDocument,
           fractionId: visit.fractionId,
+          condominiumId: visit.condominiumId ?? req.condominiumId,
           qrCodeId: visit.qrCodeId,
           method: "MANUAL",
           registeredById: req.user!.sub,
@@ -208,6 +217,9 @@ router.post(
 router.post("/:id/cancel", authorize(Role.ADMIN, Role.DOORMAN), async (req, res) => {
   const visit = await prisma.visit.findUnique({ where: { id: req.params.id } });
   if (!visit) return res.status(404).json({ error: "Não encontrada" });
+  if (visit.condominiumId && visit.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ error: "Não encontrada" });
+  }
   if (visit.status === "INSIDE" || visit.status === "EXITED") {
     return res.status(400).json({ error: "Não é possível cancelar uma visita já realizada" });
   }

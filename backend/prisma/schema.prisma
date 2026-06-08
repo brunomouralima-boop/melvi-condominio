@@ -13,7 +13,8 @@ datasource db {
 // Enums
 // ────────────────────────────────────────────────────────────
 enum Role {
-  ADMIN
+  ADMIN_ORG  // administrador de organização (gere vários condomínios)
+  ADMIN      // síndico / admin de um condomínio
   RESIDENT
   DOORMAN
 }
@@ -139,14 +140,21 @@ model Condominium {
   website     String?
   isActive    Boolean      @default(true)
   settings    Json?
+
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
   towers      Tower[]
   commonAreas CommonArea[]
   meters      Meter[]
   suppliers   Supplier[]
   documents   Document[]
   assemblies  Assembly[]
+  memberships Membership[]
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
+
+  @@index([organizationId])
 }
 
 model Tower {
@@ -168,6 +176,7 @@ model Tower {
 
 model Fraction {
   id              String          @id @default(uuid())
+  condominiumId   String?         // denormalizado p/ multi-tenant (Fase 0)
   identifier      String
   floor           Int
   type            FractionType    @default(APARTMENT)
@@ -230,6 +239,11 @@ model User {
   avatar          String?
   isActive        Boolean        @default(true)
   deletedAt       DateTime?
+
+  // Organização a que o utilizador pertence (staff/ADMIN_ORG)
+  organizationId  String?
+  organization    Organization?  @relation(fields: [organizationId], references: [id])
+  memberships     Membership[]
 
   // Fracção de residência (cache para acesso rápido — sincronizado com owner/tenant)
   fractionId      String?
@@ -313,6 +327,7 @@ model Vehicle {
 
 model QRAccessCode {
   id             String       @id @default(uuid())
+  condominiumId  String?
   type           QRAccessType
   guestName      String
   guestDocument  String?
@@ -337,6 +352,7 @@ model QRAccessCode {
 
 model AccessLog {
   id             String        @id @default(uuid())
+  condominiumId  String?
   type           AccessLogType
   personName     String
   personDocument String?
@@ -353,6 +369,7 @@ model AccessLog {
 
 model Occurrence {
   id           String              @id @default(uuid())
+  condominiumId String?
   title        String
   category     OccurrenceCategory
   description  String
@@ -372,6 +389,7 @@ model Occurrence {
 
 model PanicAlert {
   id               String      @id @default(uuid())
+  condominiumId    String?
   description      String
   fractionId       String
   fraction         Fraction    @relation(fields: [fractionId], references: [id])
@@ -387,6 +405,7 @@ model PanicAlert {
 
 model Announcement {
   id          String           @id @default(uuid())
+  condominiumId String?
   title       String
   content     String
   type        AnnouncementType @default(INFO)
@@ -412,6 +431,7 @@ model CommonArea {
 
 model Reservation {
   id           String            @id @default(uuid())
+  condominiumId String?
   commonAreaId String
   commonArea   CommonArea        @relation(fields: [commonAreaId], references: [id])
   fractionId   String
@@ -428,6 +448,7 @@ model Reservation {
 
 model FinancialRecord {
   id          String        @id @default(uuid())
+  condominiumId String?
   type        FinancialType
   category    String
   description String
@@ -462,6 +483,7 @@ model Notification {
 
 model Package {
   id             String        @id @default(uuid())
+  condominiumId  String?
   description    String
   sender         String
   fractionId     String
@@ -546,6 +568,7 @@ model AuditLog {
 // o sistema actualiza essa Visit com exitAt + durationMinutes + status=EXITED.
 model Visit {
   id                    String       @id @default(uuid())
+  condominiumId         String?
   guestName             String
   guestDocument         String?
   status                VisitStatus  @default(INSIDE)
@@ -634,6 +657,7 @@ model Supplier {
 
 model MaintenanceOrder {
   id            String               @id @default(uuid())
+  condominiumId String?
   title         String
   description   String?
   kind          MaintenanceKind      @default(CORRECTIVE)
@@ -808,4 +832,33 @@ model Pet {
   createdAt DateTime @default(now())
 
   @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Multi-condomínio (multi-tenant): organização + membros
+// ---------------------------------------------------------------------------
+model Organization {
+  id           String        @id @default(uuid())
+  name         String
+  isActive     Boolean       @default(true)
+  condominiums Condominium[]
+  users        User[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+// Acesso de um utilizador a um condomínio específico, com um papel.
+// (ADMIN_ORG acede a todos os condomínios da sua organização; os restantes
+//  papéis acedem apenas aos condomínios em que têm Membership.)
+model Membership {
+  id            String      @id @default(uuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  condominiumId String
+  condominium   Condominium @relation(fields: [condominiumId], references: [id], onDelete: Cascade)
+  role          Role
+  createdAt     DateTime    @default(now())
+
+  @@unique([userId, condominiumId])
+  @@index([condominiumId])
 }

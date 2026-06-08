@@ -13,6 +13,7 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
+    "db:backfill": "tsx prisma/backfill-multitenant.ts",
     "setup": "prisma migrate deploy && prisma generate && tsx prisma/seed.ts"
   },
   "prisma": {

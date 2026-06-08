@@ -3,10 +3,27 @@ import { z } from "zod";
 import { Role, MeterType } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate, authorize } from "../middleware/auth";
+import { resolveCondominium } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 
 const router = Router();
 router.use(authenticate);
+router.use(resolveCondominium);
+
+// Isolamento multi-tenant: qualquer rota /:id (e aninhadas /:id/readings/...)
+// opera apenas sobre medidores do condomínio activo.
+router.param("id", async (req, res, next, id) => {
+  try {
+    const m = await prisma.meter.findUnique({ where: { id }, select: { condominiumId: true } });
+    if (!m) return res.status(404).json({ error: "Not found" });
+    if (req.condominiumId && m.condominiumId !== req.condominiumId) {
+      return res.status(404).json({ error: "Not found" });
+    }
+    next();
+  } catch (e) {
+    next(e);
+  }
+});
 
 const DEFAULT_UNIT: Record<MeterType, string> = {
   WATER: "m³",
@@ -28,9 +45,11 @@ function deriveGeneratorMetrics(lastReadingValue: number, lastMaintHours: number
 
 // LIST
 router.get("/", async (req, res) => {
-  const { condominiumId, type } = req.query as { condominiumId?: string; type?: MeterType };
+  const { type } = req.query as { condominiumId?: string; type?: MeterType };
+  // O condomínio activo (header x-condominium-id) governa; a query é fallback.
+  const cid = req.condominiumId ?? (req.query.condominiumId as string | undefined);
   const where: any = {};
-  if (condominiumId) where.condominiumId = condominiumId;
+  if (cid) where.condominiumId = cid;
   if (type) where.type = type;
 
   const meters = await prisma.meter.findMany({
@@ -98,7 +117,7 @@ router.post("/", authorize(Role.ADMIN), validateBody(createSchema), async (req, 
 
   const created = await prisma.meter.create({
     data: {
-      condominiumId: body.condominiumId,
+      condominiumId: req.condominiumId ?? body.condominiumId,
       towerId: body.towerId ?? null,
       name: body.name,
       type: body.type,

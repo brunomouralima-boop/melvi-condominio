@@ -3,15 +3,18 @@ import { z } from "zod";
 import { Role } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate, authorize } from "../middleware/auth";
+import { resolveCondominium } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 
 const router = Router();
 router.use(authenticate);
+router.use(resolveCondominium);
 
 router.get("/", async (req, res) => {
-  const { condominiumId } = req.query as { condominiumId?: string };
+  // O condomínio activo (header x-condominium-id) governa; a query é fallback.
+  const cid = req.condominiumId ?? (req.query.condominiumId as string | undefined);
   const towers = await prisma.tower.findMany({
-    where: condominiumId ? { condominiumId } : {},
+    where: cid ? { condominiumId: cid } : {},
     include: {
       condominium: { select: { id: true, name: true } },
       _count: { select: { fractions: true } },
@@ -40,7 +43,10 @@ const createSchema = z.object({
 
 router.post("/", authorize(Role.ADMIN), validateBody(createSchema), async (req, res) => {
   const body = req.body as z.infer<typeof createSchema>;
-  const created = await prisma.tower.create({ data: body });
+  // Força a torre no condomínio activo (impede criar noutro condomínio).
+  const created = await prisma.tower.create({
+    data: { ...body, condominiumId: req.condominiumId ?? body.condominiumId },
+  });
   res.status(201).json(created);
 });
 
@@ -59,6 +65,9 @@ router.get("/:id", async (req, res) => {
     },
   });
   if (!item) return res.status(404).json({ error: "Not found" });
+  if (req.condominiumId && item.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ error: "Not found" });
+  }
   res.json(item);
 });
 
@@ -70,11 +79,21 @@ const updateSchema = z.object({
 });
 
 router.put("/:id", authorize(Role.ADMIN), validateBody(updateSchema), async (req, res) => {
+  const existing = await prisma.tower.findUnique({ where: { id: req.params.id }, select: { condominiumId: true } });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  if (req.condominiumId && existing.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ error: "Not found" });
+  }
   const updated = await prisma.tower.update({ where: { id: req.params.id }, data: req.body });
   res.json(updated);
 });
 
 router.delete("/:id", authorize(Role.ADMIN), async (req, res) => {
+  const existing = await prisma.tower.findUnique({ where: { id: req.params.id }, select: { condominiumId: true } });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  if (req.condominiumId && existing.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ error: "Not found" });
+  }
   const active = await prisma.fraction.count({ where: { towerId: req.params.id, isActive: true } });
   if (active > 0) {
     return res.status(409).json({ error: `Não pode eliminar: a torre tem ${active} fracção(ões) activa(s).` });

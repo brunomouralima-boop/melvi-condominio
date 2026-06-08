@@ -2,34 +2,49 @@ import { Router } from "express";
 import { Role } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate, authorize } from "../middleware/auth";
+import { resolveCondominium, tenantWhere } from "../middleware/tenant";
 
 const router = Router();
 router.use(authenticate);
+router.use(resolveCondominium);
 
-// Returns the (first) active condominium with towers
-router.get("/", async (_req, res) => {
-  const condo = await prisma.condominium.findFirst({
-    where: { isActive: true },
-    include: { towers: { include: { fractions: true } } },
-    orderBy: { createdAt: "asc" },
-  });
+// Returns the active condominium with towers
+router.get("/", async (req, res) => {
+  const condo = req.condominiumId
+    ? await prisma.condominium.findUnique({
+        where: { id: req.condominiumId },
+        include: { towers: { include: { fractions: true } } },
+      })
+    : await prisma.condominium.findFirst({
+        where: { isActive: true },
+        include: { towers: { include: { fractions: true } } },
+        orderBy: { createdAt: "asc" },
+      });
   res.json(condo);
 });
 
 // Admin dashboard stats
-router.get("/stats", authorize(Role.ADMIN), async (_req, res) => {
+router.get("/stats", authorize(Role.ADMIN), async (req, res) => {
+  const scope = tenantWhere(req);
+  // Residentes do condomínio activo — tolerante a nulos (pré-backfill): conta
+  // quem tem membership neste condomínio OU quem ainda não tem membership.
+  const residentScope: any = req.condominiumId
+    ? { OR: [{ memberships: { some: { condominiumId: req.condominiumId } } }, { memberships: { none: {} } }] }
+    : {};
+
   const [fractions, residents, openOccurrences, activePanic, todayAccess] = await Promise.all([
-    prisma.fraction.count({ where: { isActive: true } }),
-    prisma.user.count({ where: { role: Role.RESIDENT, isActive: true, deletedAt: null } }),
-    prisma.occurrence.count({ where: { status: { in: ["OPEN", "IN_PROGRESS"] } } }),
-    prisma.panicAlert.count({ where: { status: "ACTIVE" } }),
+    prisma.fraction.count({ where: { ...scope, isActive: true } }),
+    prisma.user.count({ where: { role: Role.RESIDENT, isActive: true, deletedAt: null, ...residentScope } }),
+    prisma.occurrence.count({ where: { ...scope, status: { in: ["OPEN", "IN_PROGRESS"] } } }),
+    prisma.panicAlert.count({ where: { ...scope, status: "ACTIVE" } }),
     prisma.accessLog.count({
-      where: { timestamp: { gte: new Date(new Date().setHours(0, 0, 0, 0)) } },
+      where: { ...scope, timestamp: { gte: new Date(new Date().setHours(0, 0, 0, 0)) } },
     }),
   ]);
 
   const byCategory = await prisma.occurrence.groupBy({
     by: ["category"],
+    where: scope,
     _count: { _all: true },
   });
 
@@ -37,7 +52,7 @@ router.get("/stats", authorize(Role.ADMIN), async (_req, res) => {
   since.setDate(since.getDate() - 6);
   since.setHours(0, 0, 0, 0);
   const recentLogs = await prisma.accessLog.findMany({
-    where: { timestamp: { gte: since } },
+    where: { ...scope, timestamp: { gte: since } },
     select: { timestamp: true },
   });
   const byDay: Record<string, number> = {};

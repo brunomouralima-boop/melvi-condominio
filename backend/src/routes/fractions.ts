@@ -3,16 +3,18 @@ import { z } from "zod";
 import { Role, FractionType, FractionStatus } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate, authorize } from "../middleware/auth";
+import { resolveCondominium, tenantWhere } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 
 const router = Router();
 router.use(authenticate);
+router.use(resolveCondominium);
 
 const ownerTenantSelect = { id: true, name: true, email: true, avatar: true, phone: true } as const;
 
 router.get("/", async (req, res) => {
   const { towerId, condominiumId, status, type, search } = req.query as Record<string, string | undefined>;
-  const where: any = {};
+  const where: any = { ...tenantWhere(req) };
   if (towerId) where.towerId = towerId;
   if (condominiumId) where.tower = { condominiumId };
   if (status) where.status = status;
@@ -65,11 +67,19 @@ router.post("/", authorize(Role.ADMIN), validateBody(createSchema), async (req, 
     return res.status(400).json({ error: "Uma fracção só pode ter inquilino se tiver proprietário definido." });
   }
 
+  // A torre tem de pertencer ao condomínio activo (isolamento multi-tenant)
+  const tower = await prisma.tower.findUnique({ where: { id: body.towerId }, select: { condominiumId: true } });
+  if (!tower) return res.status(400).json({ error: "Torre não encontrada." });
+  if (req.condominiumId && tower.condominiumId !== req.condominiumId) {
+    return res.status(403).json({ error: "A torre não pertence ao condomínio activo." });
+  }
+
   try {
     const created = await prisma.$transaction(async (tx) => {
       const fr = await tx.fraction.create({
         data: {
           ...body,
+          condominiumId: tower.condominiumId,
           permillage: body.permillage as any,
           areaM2: body.areaM2 as any,
           privateAreaM2: body.privateAreaM2 as any,
@@ -102,6 +112,9 @@ router.get("/:id", async (req, res) => {
     },
   });
   if (!item) return res.status(404).json({ error: "Not found" });
+  if (item.condominiumId && item.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ error: "Not found" });
+  }
   res.json(item);
 });
 
@@ -115,6 +128,9 @@ router.put("/:id", authorize(Role.ADMIN), validateBody(updateSchema), async (req
 
   const before = await prisma.fraction.findUnique({ where: { id: req.params.id } });
   if (!before) return res.status(404).json({ error: "Not found" });
+  if (before.condominiumId && before.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ error: "Not found" });
+  }
 
   if (body.tenantId && !body.ownerId && !before.ownerId) {
     return res.status(400).json({ error: "Uma fracção só pode ter inquilino se tiver proprietário definido." });
@@ -150,6 +166,11 @@ router.put("/:id", authorize(Role.ADMIN), validateBody(updateSchema), async (req
 router.patch("/:id/status", authorize(Role.ADMIN), async (req, res) => {
   const schema = z.object({ isActive: z.boolean() });
   const { isActive } = schema.parse(req.body);
+  const target = await prisma.fraction.findUnique({ where: { id: req.params.id }, select: { condominiumId: true } });
+  if (!target) return res.status(404).json({ error: "Not found" });
+  if (target.condominiumId && target.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ error: "Not found" });
+  }
   const updated = await prisma.fraction.update({ where: { id: req.params.id }, data: { isActive } });
   res.json(updated);
 });
@@ -157,6 +178,9 @@ router.patch("/:id/status", authorize(Role.ADMIN), async (req, res) => {
 router.delete("/:id", authorize(Role.ADMIN), async (req, res) => {
   const fr = await prisma.fraction.findUnique({ where: { id: req.params.id } });
   if (!fr) return res.status(404).json({ error: "Not found" });
+  if (fr.condominiumId && fr.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ error: "Not found" });
+  }
   if (fr.isActive) {
     return res.status(409).json({ error: "Desactive a fracção antes de a eliminar." });
   }
@@ -180,6 +204,9 @@ router.patch("/:id/owner", authorize(Role.ADMIN), validateBody(ownerSchema), asy
   const { ownerId } = req.body as z.infer<typeof ownerSchema>;
   const before = await prisma.fraction.findUnique({ where: { id: req.params.id } });
   if (!before) return res.status(404).json({ error: "Not found" });
+  if (before.condominiumId && before.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ error: "Not found" });
+  }
   if (ownerId && before.tenantId === ownerId) {
     return res.status(400).json({ error: "Proprietário e inquilino não podem ser o mesmo utilizador." });
   }
@@ -212,6 +239,9 @@ router.patch("/:id/tenant", authorize(Role.ADMIN), validateBody(tenantSchema), a
   const { tenantId } = req.body as z.infer<typeof tenantSchema>;
   const before = await prisma.fraction.findUnique({ where: { id: req.params.id } });
   if (!before) return res.status(404).json({ error: "Not found" });
+  if (before.condominiumId && before.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ error: "Not found" });
+  }
   if (tenantId && before.ownerId === tenantId) {
     return res.status(400).json({ error: "Proprietário e inquilino não podem ser o mesmo utilizador." });
   }

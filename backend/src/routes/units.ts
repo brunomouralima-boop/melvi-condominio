@@ -6,15 +6,18 @@ import { Router } from "express";
 import { Role } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate } from "../middleware/auth";
+import { resolveCondominium, tenantWhere } from "../middleware/tenant";
 
 const router = Router();
 router.use(authenticate);
+router.use(resolveCondominium);
 
 /**
  * @deprecated Use /api/fractions
  */
-router.get("/", async (_req, res) => {
+router.get("/", async (req, res) => {
   const fractions = await prisma.fraction.findMany({
+    where: tenantWhere(req),
     include: {
       tower: true,
       residents: { select: { id: true, name: true, email: true, role: true } },
@@ -42,6 +45,12 @@ router.get("/", async (_req, res) => {
  * @deprecated Use /api/fractions/:id
  */
 router.get("/:id/residents", async (req, res) => {
+  // Isolamento: a fracção tem de pertencer ao condomínio activo.
+  const fr = await prisma.fraction.findUnique({ where: { id: req.params.id }, select: { condominiumId: true } });
+  if (!fr) return res.status(404).json({ error: "Not found" });
+  if (fr.condominiumId && fr.condominiumId !== req.condominiumId) {
+    return res.status(404).json({ error: "Not found" });
+  }
   const residents = await prisma.user.findMany({
     where: { fractionId: req.params.id, role: Role.RESIDENT, isActive: true, deletedAt: null },
     select: { id: true, name: true, email: true, phone: true, avatar: true, isActive: true },

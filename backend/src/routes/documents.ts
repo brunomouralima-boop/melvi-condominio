@@ -1,6 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
 import fs from "fs/promises";
+import { createReadStream } from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
 import { Role, DocumentCategory } from "@prisma/client";
@@ -71,6 +72,53 @@ router.get("/", async (req, res) => {
     orderBy: { createdAt: "desc" },
   });
   res.json(items);
+});
+
+// ---------------------------------------------------------------------------
+// Download autenticado do ficheiro
+//   Substitui o acesso público a /uploads/documents/* (bloqueado em app.ts).
+//   Aplica isolamento por condomínio + visibilidade para residentes.
+// ---------------------------------------------------------------------------
+router.get("/:id/download", async (req, res, next) => {
+  try {
+    const doc = await prisma.document.findUnique({ where: { id: req.params.id } });
+    if (!doc) return res.status(404).json({ error: "Documento não encontrado" });
+
+    // Isolamento multi-tenant (mesma regra que PUT/DELETE)
+    if (doc.condominiumId && doc.condominiumId !== req.condominiumId) {
+      return res.status(404).json({ error: "Documento não encontrado" });
+    }
+    // Residente só acede a documentos visíveis
+    if (req.user!.role === Role.RESIDENT && !doc.visibleToResidents) {
+      return res.status(404).json({ error: "Documento não encontrado" });
+    }
+
+    // Resolver caminho absoluto e proteger contra path traversal
+    const base = path.resolve(config.uploads.dir);
+    const rel = doc.fileUrl.replace(/^\/uploads\//, "");
+    const absolute = path.resolve(base, rel);
+    if (absolute !== base && !absolute.startsWith(base + path.sep)) {
+      return res.status(404).json({ error: "Documento não encontrado" });
+    }
+
+    try {
+      await fs.access(absolute);
+    } catch {
+      return res.status(404).json({ error: "Ficheiro não encontrado" });
+    }
+
+    const disposition = req.query.inline === "1" ? "inline" : "attachment";
+    const safeName = encodeURIComponent(doc.fileName || "documento");
+    res.setHeader("Content-Type", doc.mimeType || "application/octet-stream");
+    res.setHeader("Content-Disposition", `${disposition}; filename*=UTF-8''${safeName}`);
+    if (doc.fileSize) res.setHeader("Content-Length", String(doc.fileSize));
+
+    const stream = createReadStream(absolute);
+    stream.on("error", next);
+    stream.pipe(res);
+  } catch (e) {
+    next(e);
+  }
 });
 
 // ---------------------------------------------------------------------------

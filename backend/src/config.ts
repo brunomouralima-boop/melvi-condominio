@@ -28,4 +28,11 @@ export const config = {
     dir: path.resolve(process.env.UPLOAD_DIR ?? "./uploads"),
     maxMb: parseInt(process.env.MAX_UPLOAD_MB ?? "8", 10),
   },
+  tenancy: {
+    // Isolamento estrito por condomínio (esconde linhas com condominiumId null).
+    // Só deve ser ligado DEPOIS de correr `db:backfill` em produção — caso
+    // contrário esconde dados existentes ainda por etiquetar. Default OFF
+    // mantém o comportamento tolerante a nulos da Fase 1.
+    strict: process.env.STRICT_TENANCY === "1" || process.env.STRICT_TENANCY === "true",
+  },
 };

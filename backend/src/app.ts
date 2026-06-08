@@ -23,7 +23,13 @@ export function createApp() {
   app.use(express.json({ limit: "2mb" }));
   app.use(express.urlencoded({ extended: true }));
 
-  // Static uploads
+  // Documentos são sensíveis: NÃO servir directamente o subdir.
+  // Acesso apenas via GET /api/documents/:id/download (autenticado + scoped).
+  app.use("/uploads/documents", (_req: Request, res: Response) => {
+    res.status(404).json({ error: "Not found" });
+  });
+
+  // Static uploads (imagens públicas: avatares, fotos de pets/veículos/ocorrências, etc.)
   app.use("/uploads", express.static(config.uploads.dir));
 
   // Healthcheck — exposto em ambas as rotas para compatibilidade

@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import { Role } from "@prisma/client";
 import { prisma } from "../prisma";
+import { config } from "../config";
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -71,14 +72,15 @@ export async function resolveCondominium(req: Request, _res: Response, next: Nex
 /**
  * WHERE de scoping para listas.
  *
- * Tolerante a nulos durante a transição (Fase 1): inclui o condomínio activo
- * E as linhas ainda sem condomínio (pré-backfill), para não "esconder" dados
- * existentes se o deploy acontecer antes de correr `db:backfill`.
- * Depois do backfill deixam de existir nulos. Em Fase 4 isto pode ser apertado
- * para `{ condominiumId }` estrito.
+ * - Modo estrito (`config.tenancy.strict`, Fase 4 pós-backfill): só o condomínio
+ *   activo. Esconde linhas com `condominiumId` null.
+ * - Modo tolerante (default, Fase 1): inclui o condomínio activo E as linhas
+ *   ainda sem condomínio (pré-backfill), para não "esconder" dados existentes
+ *   se o deploy acontecer antes de correr `db:backfill`.
  */
 export function tenantWhere(req: Request): Record<string, unknown> {
   if (!req.condominiumId) return {};
+  if (config.tenancy.strict) return { condominiumId: req.condominiumId };
   return { OR: [{ condominiumId: req.condominiumId }, { condominiumId: null }] };
 }
 
@@ -90,7 +92,10 @@ export function tenantWhere(req: Request): Record<string, unknown> {
 export function scopeWhere<T extends Record<string, any>>(req: Request, where: T): T {
   if (!req.condominiumId) return where;
   const w = where as Record<string, any>;
-  const clause = { OR: [{ condominiumId: req.condominiumId }, { condominiumId: null }] };
+  const clause = config.tenancy.strict
+    ? { condominiumId: req.condominiumId }
+    : { OR: [{ condominiumId: req.condominiumId }, { condominiumId: null }] };
+  // Se o where já tem OR/AND, compõe via AND para não colidir chaves; senão funde.
   if (w.OR !== undefined || w.AND !== undefined) {
     w.AND = [...(Array.isArray(w.AND) ? w.AND : w.AND ? [w.AND] : []), clause];
   } else {
@@ -111,6 +116,10 @@ export function scopeWhere<T extends Record<string, any>>(req: Request, where: T
  */
 export function ownerCondoScope(req: Request): Record<string, unknown> {
   if (!req.condominiumId) return {};
+  if (config.tenancy.strict) {
+    // Estrito: só donos com membership no condomínio activo.
+    return { user: { memberships: { some: { condominiumId: req.condominiumId } } } };
+  }
   return {
     user: {
       OR: [

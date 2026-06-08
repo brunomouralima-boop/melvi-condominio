@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/utils";
 import type { DocumentItem } from "@/types";
 import { DOCUMENT_CATEGORIES, DOCUMENT_CATEGORY_LABEL, formatFileSize } from "@/components/documents/categories";
+import { openDocument } from "@/components/documents/download";
 
 export function ResidentDocuments() {
   const { data: documents = [], isLoading } = useQuery({
@@ -45,9 +46,7 @@ export function ResidentDocuments() {
                       {d.fileSize ? ` · ${formatFileSize(d.fileSize)}` : ""}
                     </div>
                   </div>
-                  <a href={d.fileUrl} target="_blank" rel="noopener noreferrer">
-                    <Button size="sm" variant="outline"><Download className="h-4 w-4" /> Abrir</Button>
-                  </a>
+                  <Button size="sm" variant="outline" onClick={() => openDocument(d)}><Download className="h-4 w-4" /> Abrir</Button>
                 </div>
               ))}
             </div>

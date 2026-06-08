@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/utils";
 import type { DocumentItem, DocumentCategory } from "@/types";
 import { DOCUMENT_CATEGORIES, DOCUMENT_CATEGORY_LABEL, formatFileSize } from "@/components/documents/categories";
+import { openDocument } from "@/components/documents/download";
 import toast from "react-hot-toast";
 
 export function AdminDocuments() {
@@ -77,9 +78,7 @@ export function AdminDocuments() {
                     </td>
                     <td className="py-2 px-2">
                       <div className="flex justify-end gap-1">
-                        <a href={d.fileUrl} target="_blank" rel="noopener noreferrer">
-                          <Button size="sm" variant="ghost" title="Abrir / descarregar"><Download className="h-4 w-4" /></Button>
-                        </a>
+                        <Button size="sm" variant="ghost" title="Abrir / descarregar" onClick={() => openDocument(d)}><Download className="h-4 w-4" /></Button>
                         <Button size="sm" variant="ghost" title={d.visibleToResidents ? "Tornar privado" : "Tornar visível"} onClick={() => toggleVisibility.mutate(d)}>
                           {d.visibleToResidents ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </Button>

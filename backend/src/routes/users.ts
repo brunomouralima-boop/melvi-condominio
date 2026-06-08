@@ -4,27 +4,42 @@ import crypto from "crypto";
 import { Role } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate, authorize } from "../middleware/auth";
+import { resolveCondominium } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 import { hashPassword } from "../utils/password";
 
 const router = Router();
 router.use(authenticate);
+router.use(resolveCondominium);
 
 router.get("/", authorize(Role.ADMIN), async (req, res) => {
   const { role, search, includeInactive } = req.query as { role?: Role; search?: string; includeInactive?: string };
+  // Scoping multi-tenant: o User não tem `condominiumId` próprio, liga-se ao
+  // condomínio via Membership. Compomos com AND (a pesquisa já usa OR) e somos
+  // tolerantes a nulos (inclui quem ainda não tem membership — pré-backfill).
+  const and: any[] = [];
+  if (search) {
+    and.push({
+      OR: [
+        { name: { contains: search, mode: "insensitive" } },
+        { email: { contains: search, mode: "insensitive" } },
+      ],
+    });
+  }
+  if (req.condominiumId) {
+    and.push({
+      OR: [
+        { memberships: { some: { condominiumId: req.condominiumId } } },
+        { memberships: { none: {} } },
+      ],
+    });
+  }
   const users = await prisma.user.findMany({
     where: {
       deletedAt: null,
       ...(includeInactive === "true" ? {} : { isActive: true }),
       ...(role ? { role } : {}),
-      ...(search
-        ? {
-            OR: [
-              { name: { contains: search, mode: "insensitive" } },
-              { email: { contains: search, mode: "insensitive" } },
-            ],
-          }
-        : {}),
+      ...(and.length ? { AND: and } : {}),
     },
     include: {
       fraction: { include: { tower: true } },

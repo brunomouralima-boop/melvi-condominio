@@ -3,13 +3,16 @@ import { z } from "zod";
 import { Role } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate } from "../middleware/auth";
+import { resolveCondominium, ownerCondoScope } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 
 const router = Router();
 router.use(authenticate);
+router.use(resolveCondominium);
 
 router.get("/", async (req, res) => {
-  const where = req.user!.role === Role.ADMIN ? {} : { userId: req.user!.sub };
+  // Admin vê os do condomínio activo (via condomínio do dono); residente só os seus.
+  const where = req.user!.role === Role.ADMIN ? ownerCondoScope(req) : { userId: req.user!.sub };
   const items = await prisma.domesticEmployee.findMany({ where, orderBy: { createdAt: "desc" } });
   res.json(items);
 });

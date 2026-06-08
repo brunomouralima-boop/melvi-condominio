@@ -99,6 +99,28 @@ export function scopeWhere<T extends Record<string, any>>(req: Request, where: T
   return where;
 }
 
+/**
+ * WHERE de scoping para entidades pessoais (Pet, Dependent, Vehicle,
+ * DomesticEmployee) que NÃO têm `condominiumId` próprio e só se ligam ao
+ * condomínio através do dono (`user`).
+ *
+ * Tolerante a nulos (Fase 1): inclui donos com membership no condomínio activo
+ * E donos ainda sem qualquer membership (pré-backfill), para não esconder
+ * registos existentes antes de correr `db:backfill`. Igual à lógica de
+ * residentes em /condominium/stats, mas embrulhada na relação `user`.
+ */
+export function ownerCondoScope(req: Request): Record<string, unknown> {
+  if (!req.condominiumId) return {};
+  return {
+    user: {
+      OR: [
+        { memberships: { some: { condominiumId: req.condominiumId } } },
+        { memberships: { none: {} } },
+      ],
+    },
+  };
+}
+
 /** Garante que há um condomínio activo (para escritas). */
 export function requireCondominium(req: Request, res: Response, next: NextFunction) {
   if (!req.condominiumId) {

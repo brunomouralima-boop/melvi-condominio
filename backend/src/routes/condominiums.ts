@@ -1,16 +1,30 @@
-import { Router } from "express";
+import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { Role } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate, authorize } from "../middleware/auth";
+import { resolveCondominium } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 
 const router = Router();
 router.use(authenticate);
+router.use(resolveCondominium);
 
-// List all condominiums with counts
-router.get("/", async (_req, res) => {
+// Isolamento: o condomínio do path tem de estar entre os acessíveis ao
+// utilizador (membership/organização). Pré-backfill, o fallback resolve o
+// único condomínio existente, pelo que continua a funcionar em produção 1-condo.
+function ensureAccessible(req: Request, res: Response, id: string): boolean {
+  if (req.accessibleCondominiumIds && !req.accessibleCondominiumIds.includes(id)) {
+    res.status(404).json({ error: "Not found" });
+    return false;
+  }
+  return true;
+}
+
+// List all condominiums with counts (scoped aos condomínios acessíveis)
+router.get("/", async (req, res) => {
   const items = await prisma.condominium.findMany({
+    where: req.accessibleCondominiumIds ? { id: { in: req.accessibleCondominiumIds } } : {},
     include: {
       _count: { select: { towers: true } },
       towers: {
@@ -45,6 +59,7 @@ router.post("/", authorize(Role.ADMIN), validateBody(createSchema), async (req, 
 });
 
 router.get("/:id", async (req, res) => {
+  if (!ensureAccessible(req, res, req.params.id)) return;
   const item = await prisma.condominium.findUnique({
     where: { id: req.params.id },
     include: {
@@ -68,11 +83,13 @@ const updateSchema = createSchema.partial().extend({
 });
 
 router.put("/:id", authorize(Role.ADMIN), validateBody(updateSchema), async (req, res) => {
+  if (!ensureAccessible(req, res, req.params.id)) return;
   const updated = await prisma.condominium.update({ where: { id: req.params.id }, data: req.body });
   res.json(updated);
 });
 
 router.delete("/:id", authorize(Role.ADMIN), async (req, res) => {
+  if (!ensureAccessible(req, res, req.params.id)) return;
   const active = await prisma.fraction.count({
     where: { tower: { condominiumId: req.params.id }, isActive: true },
   });
@@ -85,6 +102,7 @@ router.delete("/:id", authorize(Role.ADMIN), async (req, res) => {
 
 // Validação de permilagem: soma de todas as fracções deve aproximar 1000‰
 router.get("/:id/permillage-check", async (req, res) => {
+  if (!ensureAccessible(req, res, req.params.id)) return;
   const fractions = await prisma.fraction.findMany({
     where: { tower: { condominiumId: req.params.id }, isActive: true },
     select: { permillage: true },

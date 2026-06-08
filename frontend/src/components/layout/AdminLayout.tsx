@@ -39,6 +39,7 @@ const entries: SidebarEntry[] = [
     label: "Condomínio",
     icon: Building,
     items: [
+      { to: "/admin/condominiums", label: "Condomínios & Acessos", icon: Building },
       { to: "/admin/condominium", label: "Configuração Geral", icon: Settings },
       { to: "/admin/towers", label: "Torres", icon: Layers },
       { to: "/admin/fractions", label: "Fracções", icon: Home },

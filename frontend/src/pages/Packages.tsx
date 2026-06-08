@@ -26,7 +26,7 @@ export function PackagesPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
-  const canRegister = user?.role === "DOORMAN" || user?.role === "ADMIN";
+  const canRegister = user?.role === "DOORMAN" || user?.role === "ADMIN" || user?.role === "ADMIN_ORG";
 
   const { data: items = [] } = useQuery({
     queryKey: ["packages"],

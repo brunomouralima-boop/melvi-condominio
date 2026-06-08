@@ -19,9 +19,10 @@ export function LoginPage() {
     setLoading(true);
     try {
       const user = await login(email, password);
+      const isAdmin = user.role === "ADMIN" || user.role === "ADMIN_ORG";
       const redirect =
         (location.state as any)?.from?.pathname ||
-        (user.role === "ADMIN" ? "/admin" : user.role === "DOORMAN" ? "/doorman" : "/resident");
+        (isAdmin ? "/admin" : user.role === "DOORMAN" ? "/doorman" : "/resident");
       navigate(redirect, { replace: true });
     } catch (err: any) {
       toast.error(err?.response?.data?.error || "Credenciais inválidas");

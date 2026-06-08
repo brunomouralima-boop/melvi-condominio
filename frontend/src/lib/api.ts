@@ -9,6 +9,7 @@ export const api = axios.create({
 
 const ACCESS_KEY = "melvi_access";
 const REFRESH_KEY = "melvi_refresh";
+const CONDO_KEY = "melvi_condo";
 
 export const tokenStore = {
   getAccess: () => localStorage.getItem(ACCESS_KEY),
@@ -23,9 +24,20 @@ export const tokenStore = {
   },
 };
 
+// Condomínio activo (multi-tenant). Persiste a escolha do utilizador e
+// é enviado em cada pedido via header `x-condominium-id`; o servidor valida-o
+// contra os condomínios acessíveis (resolveCondominium).
+export const condoStore = {
+  get: () => localStorage.getItem(CONDO_KEY),
+  set: (id: string) => localStorage.setItem(CONDO_KEY, id),
+  clear: () => localStorage.removeItem(CONDO_KEY),
+};
+
 api.interceptors.request.use((cfg) => {
   const token = tokenStore.getAccess();
   if (token) cfg.headers.Authorization = `Bearer ${token}`;
+  const condo = condoStore.get();
+  if (condo) cfg.headers["x-condominium-id"] = condo;
   return cfg;
 });
 

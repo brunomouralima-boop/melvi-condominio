@@ -36,6 +36,7 @@ import { ResidentAssemblyDetail } from "@/pages/resident/AssemblyDetail";
 import { ResidentPets } from "@/pages/resident/Pets";
 import { AdminSettings } from "@/pages/admin/Settings";
 import { AdminCondominium } from "@/pages/admin/Condominium";
+import { AdminCondominiums } from "@/pages/admin/Condominiums";
 import { AdminTowers } from "@/pages/admin/Towers";
 import { AdminFractions } from "@/pages/admin/Fractions";
 import { AdminMeters } from "@/pages/admin/Meters";
@@ -65,7 +66,8 @@ function RootRedirect() {
   const { user, loading } = useAuth();
   if (loading) return <div className="grid min-h-screen place-items-center text-slate-400">A carregar…</div>;
   if (!user) return <Navigate to="/login" replace />;
-  return <Navigate to={user.role === "ADMIN" ? "/admin" : user.role === "DOORMAN" ? "/doorman" : "/resident"} replace />;
+  const isAdmin = user.role === "ADMIN" || user.role === "ADMIN_ORG";
+  return <Navigate to={isAdmin ? "/admin" : user.role === "DOORMAN" ? "/doorman" : "/resident"} replace />;
 }
 
 export default function App() {
@@ -83,12 +85,13 @@ export default function App() {
               <Route
                 path="/admin"
                 element={
-                  <ProtectedRoute roles={["ADMIN"]}>
+                  <ProtectedRoute roles={["ADMIN", "ADMIN_ORG"]}>
                     <AdminLayout />
                   </ProtectedRoute>
                 }
               >
                 <Route index element={<AdminDashboard />} />
+                <Route path="condominiums" element={<AdminCondominiums />} />
                 <Route path="condominium" element={<AdminCondominium />} />
                 <Route path="towers" element={<AdminTowers />} />
                 <Route path="fractions" element={<AdminFractions />} />

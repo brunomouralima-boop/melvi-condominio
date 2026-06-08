@@ -4,6 +4,7 @@ import { LogOut, Building2, ChevronDown, ChevronRight, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { CondoSwitcher } from "./CondoSwitcher";
 
 export interface SidebarItem {
   to: string;
@@ -78,6 +79,8 @@ export function Sidebar({ items, title, accent = "default", isOpen = false, onCl
             <X className="h-5 w-5" />
           </button>
         </div>
+        {/* Selector de condomínio activo (multi-tenant) — auto-esconde se ≤1 */}
+        <CondoSwitcher />
         <nav className={cn("flex-1 overflow-y-auto px-3 py-4 space-y-1", accent === "doorman" && "text-base")}>
           {items.map((entry, idx) =>
             isGroup(entry) ? (

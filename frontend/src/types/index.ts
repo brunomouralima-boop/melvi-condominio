@@ -1,4 +1,10 @@
-export type Role = "ADMIN" | "RESIDENT" | "DOORMAN";
+export type Role = "ADMIN_ORG" | "ADMIN" | "RESIDENT" | "DOORMAN";
+
+/** Resumo de um condomínio acessível (para o selector multi-tenant) */
+export interface CondoSummary {
+  id: string;
+  name: string;
+}
 
 export interface AuthUser {
   id: string;
@@ -9,6 +15,10 @@ export interface AuthUser {
   avatar?: string | null;
   fractionId?: string | null;
   fraction?: Fraction | null;
+  /** Condomínios a que o utilizador tem acesso (membership/organização) */
+  condominiums?: CondoSummary[];
+  /** Condomínio activo resolvido pelo servidor (header x-condominium-id) */
+  activeCondominiumId?: string | null;
 }
 
 export interface Condominium {

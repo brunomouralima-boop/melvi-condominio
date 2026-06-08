@@ -28,6 +28,12 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
 export function authorize(...roles: Role[]) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) return res.status(401).json({ error: "Unauthenticated" });
+    // ADMIN_ORG herda os poderes de ADMIN: em qualquer rota que permita ADMIN,
+    // o ADMIN_ORG também passa (administra qualquer condomínio da sua organização,
+    // limitado ao condomínio activo por `resolveCondominium`/`tenantWhere`).
+    if (req.user.role === Role.ADMIN_ORG && roles.includes(Role.ADMIN)) {
+      return next();
+    }
     if (!roles.includes(req.user.role)) {
       return res.status(403).json({ error: "Forbidden" });
     }

@@ -54,7 +54,21 @@ const createSchema = z.object({
 
 router.post("/", authorize(Role.ADMIN), validateBody(createSchema), async (req, res) => {
   const body = req.body as z.infer<typeof createSchema>;
-  const created = await prisma.condominium.create({ data: body });
+  // Liga o novo condomínio à organização do criador e garante-lhe acesso
+  // (ADMIN_ORG acede via organização, mas um ADMIN precisa de Membership).
+  const creator = await prisma.user.findUnique({
+    where: { id: req.user!.sub },
+    select: { organizationId: true },
+  });
+  const created = await prisma.$transaction(async (tx) => {
+    const condo = await tx.condominium.create({
+      data: { ...body, organizationId: creator?.organizationId ?? undefined },
+    });
+    await tx.membership.create({
+      data: { userId: req.user!.sub, condominiumId: condo.id, role: req.user!.role },
+    });
+    return condo;
+  });
   res.status(201).json(created);
 });
 
@@ -115,6 +129,69 @@ router.get("/:id/permillage-check", async (req, res) => {
     ok: Math.abs(diff) <= 0.1,
     warning: Math.abs(diff) > 0.1 ? `Total ${total.toFixed(4)}‰ — divergência de ${diff.toFixed(4)}‰ face a 1000‰.` : null,
   });
+});
+
+// ─── Gestão de membros (memberships) ──────────────────────────────
+// Quem tem acesso a este condomínio e com que papel. ADMIN_ORG gere todos
+// os condomínios da organização; um ADMIN gere o(s) seu(s) (via ensureAccessible).
+
+router.get("/:id/members", authorize(Role.ADMIN), async (req, res) => {
+  if (!ensureAccessible(req, res, req.params.id)) return;
+  const members = await prisma.membership.findMany({
+    where: { condominiumId: req.params.id },
+    include: {
+      user: { select: { id: true, name: true, email: true, role: true, isActive: true, avatar: true } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+  res.json(members);
+});
+
+const memberSchema = z.object({
+  userId: z.string().uuid(),
+  role: z.nativeEnum(Role),
+});
+
+router.post("/:id/members", authorize(Role.ADMIN), validateBody(memberSchema), async (req, res) => {
+  if (!ensureAccessible(req, res, req.params.id)) return;
+  const { userId, role } = req.body as z.infer<typeof memberSchema>;
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+  if (!user) return res.status(404).json({ error: "Utilizador não encontrado" });
+  const membership = await prisma.membership.upsert({
+    where: { userId_condominiumId: { userId, condominiumId: req.params.id } },
+    create: { userId, condominiumId: req.params.id, role },
+    update: { role },
+    include: { user: { select: { id: true, name: true, email: true, role: true } } },
+  });
+  res.status(201).json(membership);
+});
+
+const memberRoleSchema = z.object({ role: z.nativeEnum(Role) });
+
+router.patch("/:id/members/:userId", authorize(Role.ADMIN), validateBody(memberRoleSchema), async (req, res) => {
+  if (!ensureAccessible(req, res, req.params.id)) return;
+  const { role } = req.body as z.infer<typeof memberRoleSchema>;
+  const existing = await prisma.membership.findUnique({
+    where: { userId_condominiumId: { userId: req.params.userId, condominiumId: req.params.id } },
+  });
+  if (!existing) return res.status(404).json({ error: "Membro não encontrado" });
+  const updated = await prisma.membership.update({
+    where: { userId_condominiumId: { userId: req.params.userId, condominiumId: req.params.id } },
+    data: { role },
+  });
+  res.json(updated);
+});
+
+router.delete("/:id/members/:userId", authorize(Role.ADMIN), async (req, res) => {
+  if (!ensureAccessible(req, res, req.params.id)) return;
+  // Impede remover o próprio acesso (evita auto-bloqueio).
+  if (req.params.userId === req.user!.sub) {
+    return res.status(400).json({ error: "Não pode remover o seu próprio acesso." });
+  }
+  await prisma.membership.deleteMany({
+    where: { userId: req.params.userId, condominiumId: req.params.id },
+  });
+  res.json({ ok: true });
 });
 
 export default router;

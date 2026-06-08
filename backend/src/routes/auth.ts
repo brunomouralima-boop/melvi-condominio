@@ -5,6 +5,7 @@ import { prisma } from "../prisma";
 import { hashPassword, verifyPassword } from "../utils/password";
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../utils/jwt";
 import { authenticate } from "../middleware/auth";
+import { resolveCondominium } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 
 const router = Router();
@@ -82,7 +83,7 @@ router.post("/logout", async (req, res) => {
   res.json({ ok: true });
 });
 
-router.get("/me", authenticate, async (req, res) => {
+router.get("/me", authenticate, resolveCondominium, async (req, res) => {
   const user = await prisma.user.findUnique({
     where: { id: req.user!.sub },
     include: {
@@ -92,8 +93,23 @@ router.get("/me", authenticate, async (req, res) => {
     },
   });
   if (!user) return res.status(404).json({ error: "User not found" });
+
+  // Condomínios acessíveis (para o selector multi-tenant) + o activo resolvido.
+  const ids = req.accessibleCondominiumIds ?? [];
+  const condominiums = ids.length
+    ? await prisma.condominium.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      })
+    : [];
+
   const { password: _p, ...safe } = user;
-  res.json(safe);
+  res.json({
+    ...safe,
+    condominiums,
+    activeCondominiumId: req.condominiumId ?? null,
+  });
 });
 
 const changePasswordSchema = z.object({

@@ -63,15 +63,26 @@ const createUserSchema = z.object({
 router.post("/", authorize(Role.ADMIN), validateBody(createUserSchema), async (req, res) => {
   const body = req.body as z.infer<typeof createUserSchema>;
   const fractionId = body.fractionId ?? body.unitId ?? null;
-  const user = await prisma.user.create({
-    data: {
-      name: body.name,
-      email: body.email,
-      password: await hashPassword(body.password),
-      role: body.role,
-      phone: body.phone,
-      fractionId,
-    },
+  const hashed = await hashPassword(body.password);
+  // Cria o utilizador e, se houver condomínio activo, liga-o via Membership
+  // (para aparecer no condomínio certo quando o scoping passar a estrito).
+  const user = await prisma.$transaction(async (tx) => {
+    const u = await tx.user.create({
+      data: {
+        name: body.name,
+        email: body.email,
+        password: hashed,
+        role: body.role,
+        phone: body.phone,
+        fractionId,
+      },
+    });
+    if (req.condominiumId) {
+      await tx.membership.create({
+        data: { userId: u.id, condominiumId: req.condominiumId, role: body.role },
+      });
+    }
+    return u;
   });
   const { password, ...safe } = user;
   res.status(201).json(safe);

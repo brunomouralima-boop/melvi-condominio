@@ -56,7 +56,8 @@ done
 # ─── Verificar backend health ────────────────────────────
 echo "⏳ Aguardando backend responder…"
 for i in {1..30}; do
-  if docker compose exec -T backend wget --quiet --spider http://localhost:4000/health 2>/dev/null; then
+  # A imagem do backend traz curl (não wget) — usar curl para o health-check.
+  if docker compose exec -T backend curl -fsS http://localhost:4000/health >/dev/null 2>&1; then
     echo "   ✔ Backend a responder."
     break
   fi

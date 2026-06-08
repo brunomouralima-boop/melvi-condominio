@@ -423,12 +423,18 @@ model FinancialRecord {
   amount      Decimal       @db.Decimal(12, 2)
   dueDate     DateTime
   paidDate    DateTime?
+  competence  String?       // mes de competencia "YYYY-MM" (cobrancas)
+  batchId     String?       // agrupa cobrancas geradas em lote
   fractionId  String?
   fraction    Fraction?     @relation(fields: [fractionId], references: [id])
   receiptUrl  String?
   createdById String
   createdBy   User          @relation("FinancialCreator", fields: [createdById], references: [id])
   createdAt   DateTime      @default(now())
+
+  @@index([fractionId])
+  @@index([competence])
+  @@index([batchId])
 }
 
 model Notification {

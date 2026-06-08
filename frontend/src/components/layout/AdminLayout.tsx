@@ -19,6 +19,8 @@ import {
   Zap,
   Cog,
   Fuel,
+  Receipt,
+  AlertCircle,
 } from "lucide-react";
 import { Sidebar, SidebarEntry } from "./Sidebar";
 import { MobileTopbar } from "./MobileTopbar";
@@ -42,7 +44,14 @@ const entries: SidebarEntry[] = [
   { to: "/admin/visits", label: "Visitas", icon: Users },
   { to: "/admin/announcements", label: "Comunicados", icon: Megaphone },
   { to: "/admin/common-areas", label: "Áreas Comuns", icon: Calendar },
-  { to: "/admin/financial", label: "Financeiro", icon: Wallet },
+  {
+    label: "Financeiro",
+    icon: Wallet,
+    items: [
+      { to: "/admin/financial", label: "Lançamentos & Cobranças", icon: Receipt },
+      { to: "/admin/delinquency", label: "Inadimplência", icon: AlertCircle },
+    ],
+  },
   { to: "/admin/packages", label: "Encomendas", icon: Package },
   {
     label: "Medidores",

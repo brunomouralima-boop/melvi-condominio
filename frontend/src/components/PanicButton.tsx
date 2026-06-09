@@ -65,7 +65,7 @@ export function PanicButton() {
             <Siren className="h-8 w-8" />
           </div>
           <div className="flex-1">
-            <div className="font-display text-xl font-bold">BOTÃO DE PÂNICO</div>
+            <div className="font-display text-xl font-bold">BOTÃO DE ALERTA</div>
             <div className="text-sm opacity-90">
               Em caso de emergência, prima aqui para alertar o porteiro e a administração.
             </div>
@@ -80,7 +80,7 @@ export function PanicButton() {
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2 text-coral-700">
                   <AlertTriangle className="h-5 w-5" />
-                  Acionar alerta de pânico
+                  Acionar Botão de Alerta
                 </DialogTitle>
                 <DialogDescription>
                   Descreva brevemente a emergência (mínimo 10 caracteres).

@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { LogOut, ChevronDown, ChevronRight, X } from "lucide-react";
+import { LogOut, ChevronDown, ChevronRight, KeyRound, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermission } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { BrandLogo } from "@/components/brand/BrandLogo";
+import { ChangePasswordDialog } from "@/components/ChangePasswordDialog";
 import { CondoSwitcher } from "./CondoSwitcher";
 
 export interface SidebarItem {
@@ -46,6 +47,7 @@ export function Sidebar({ items, title, accent = "default", isOpen = false, onCl
   const { user, logout } = useAuth();
   const { can } = usePermission();
   const navigate = useNavigate();
+  const [showChangePassword, setShowChangePassword] = useState(false);
 
   // Filtra entradas por permissão (apenas UI; o back-end continua a decidir).
   const visibleItems = items
@@ -117,6 +119,13 @@ export function Sidebar({ items, title, accent = "default", isOpen = false, onCl
           <Button
             variant="ghost"
             className="w-full justify-start text-slate-300 hover:bg-brand-800 hover:text-white"
+            onClick={() => setShowChangePassword(true)}
+          >
+            <KeyRound className="h-4 w-4" /> Alterar senha
+          </Button>
+          <Button
+            variant="ghost"
+            className="w-full justify-start text-slate-300 hover:bg-brand-800 hover:text-white"
             onClick={async () => {
               await logout();
               navigate("/login");
@@ -126,6 +135,8 @@ export function Sidebar({ items, title, accent = "default", isOpen = false, onCl
           </Button>
         </div>
       </aside>
+
+      {showChangePassword && <ChangePasswordDialog onClose={() => setShowChangePassword(false)} />}
     </>
   );
 }

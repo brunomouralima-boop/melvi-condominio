@@ -144,13 +144,31 @@ router.post("/change-password", authenticate, validateBody(changePasswordSchema)
   const user = await prisma.user.findUnique({ where: { id: req.user!.sub } });
   if (!user) return res.status(404).json({ error: "User not found" });
   const ok = await verifyPassword(currentPassword, user.password);
-  if (!ok) return res.status(400).json({ error: "Current password is incorrect" });
+  if (!ok) return res.status(400).json({ error: "A senha actual está incorrecta" });
 
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { password: await hashPassword(newPassword) },
-  });
-  res.json({ ok: true });
+  // Termina TODAS as sessões antigas (revoga os refresh tokens) e emite um par
+  // novo para esta sessão — quem mudou a senha continua autenticado; qualquer
+  // outro dispositivo deixa de conseguir renovar o acesso.
+  const payload = { sub: user.id, role: user.role, fractionId: user.fractionId };
+  const accessToken = signAccessToken(payload);
+  const refreshToken = signRefreshToken(payload);
+
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: user.id },
+      data: { password: await hashPassword(newPassword) },
+    }),
+    prisma.refreshToken.deleteMany({ where: { userId: user.id } }),
+    prisma.refreshToken.create({
+      data: {
+        token: refreshToken,
+        userId: user.id,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      },
+    }),
+  ]);
+
+  res.json({ ok: true, accessToken, refreshToken });
 });
 
 // ───────────────────────────────────────────────────────────────────────────

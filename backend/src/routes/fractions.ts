@@ -3,6 +3,7 @@ import { z } from "zod";
 import { Role, FractionType, FractionStatus } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate, authorize } from "../middleware/auth";
+import { requirePermission } from "../middleware/permission";
 import { resolveCondominium, tenantWhere } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 
@@ -58,7 +59,7 @@ const createSchema = z.object({
   tenantId: z.string().uuid().optional().nullable(),
 });
 
-router.post("/", authorize(Role.ADMIN), validateBody(createSchema), async (req, res) => {
+router.post("/", authorize(Role.ADMIN), requirePermission("fractions:write"), validateBody(createSchema), async (req, res) => {
   const body = req.body as z.infer<typeof createSchema>;
   if (body.ownerId && body.tenantId && body.ownerId === body.tenantId) {
     return res.status(400).json({ error: "Proprietário e inquilino não podem ser o mesmo utilizador." });
@@ -120,7 +121,7 @@ router.get("/:id", async (req, res) => {
 
 const updateSchema = createSchema.partial().omit({ towerId: true });
 
-router.put("/:id", authorize(Role.ADMIN), validateBody(updateSchema), async (req, res) => {
+router.put("/:id", authorize(Role.ADMIN), requirePermission("fractions:write"), validateBody(updateSchema), async (req, res) => {
   const body = req.body as z.infer<typeof updateSchema>;
   if (body.ownerId && body.tenantId && body.ownerId === body.tenantId) {
     return res.status(400).json({ error: "Proprietário e inquilino não podem ser o mesmo utilizador." });
@@ -163,7 +164,7 @@ router.put("/:id", authorize(Role.ADMIN), validateBody(updateSchema), async (req
   res.json(updated);
 });
 
-router.patch("/:id/status", authorize(Role.ADMIN), async (req, res) => {
+router.patch("/:id/status", authorize(Role.ADMIN), requirePermission("fractions:write"), async (req, res) => {
   const schema = z.object({ isActive: z.boolean() });
   const { isActive } = schema.parse(req.body);
   const target = await prisma.fraction.findUnique({ where: { id: req.params.id }, select: { condominiumId: true } });
@@ -175,7 +176,7 @@ router.patch("/:id/status", authorize(Role.ADMIN), async (req, res) => {
   res.json(updated);
 });
 
-router.delete("/:id", authorize(Role.ADMIN), async (req, res) => {
+router.delete("/:id", authorize(Role.ADMIN), requirePermission("fractions:write"), async (req, res) => {
   const fr = await prisma.fraction.findUnique({ where: { id: req.params.id } });
   if (!fr) return res.status(404).json({ error: "Not found" });
   if (fr.condominiumId && fr.condominiumId !== req.condominiumId) {
@@ -200,7 +201,7 @@ router.delete("/:id", authorize(Role.ADMIN), async (req, res) => {
 
 const ownerSchema = z.object({ ownerId: z.string().uuid().nullable() });
 
-router.patch("/:id/owner", authorize(Role.ADMIN), validateBody(ownerSchema), async (req, res) => {
+router.patch("/:id/owner", authorize(Role.ADMIN), requirePermission("fractions:write"), validateBody(ownerSchema), async (req, res) => {
   const { ownerId } = req.body as z.infer<typeof ownerSchema>;
   const before = await prisma.fraction.findUnique({ where: { id: req.params.id } });
   if (!before) return res.status(404).json({ error: "Not found" });
@@ -235,7 +236,7 @@ router.patch("/:id/owner", authorize(Role.ADMIN), validateBody(ownerSchema), asy
 
 const tenantSchema = z.object({ tenantId: z.string().uuid().nullable() });
 
-router.patch("/:id/tenant", authorize(Role.ADMIN), validateBody(tenantSchema), async (req, res) => {
+router.patch("/:id/tenant", authorize(Role.ADMIN), requirePermission("fractions:write"), validateBody(tenantSchema), async (req, res) => {
   const { tenantId } = req.body as z.infer<typeof tenantSchema>;
   const before = await prisma.fraction.findUnique({ where: { id: req.params.id } });
   if (!before) return res.status(404).json({ error: "Not found" });

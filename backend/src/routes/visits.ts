@@ -3,6 +3,7 @@ import { z } from "zod";
 import { Role, VisitStatus } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate, authorize } from "../middleware/auth";
+import { requirePermission } from "../middleware/permission";
 import { resolveCondominium, scopeWhere } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 import { emitToRole, emitToUser } from "../sockets";
@@ -112,6 +113,7 @@ const exitSchema = z.object({
 router.post(
   "/:id/exit",
   authorize(Role.DOORMAN, Role.ADMIN),
+  requirePermission("visits:write"),
   validateBody(exitSchema),
   async (req, res) => {
     const { notes } = req.body as z.infer<typeof exitSchema>;
@@ -214,7 +216,7 @@ router.post(
  * POST /api/visits/:id/cancel — cancelar uma visita (por administrador)
  * Só funciona se status ainda for SCHEDULED ou WAITING.
  */
-router.post("/:id/cancel", authorize(Role.ADMIN, Role.DOORMAN), async (req, res) => {
+router.post("/:id/cancel", authorize(Role.ADMIN, Role.DOORMAN), requirePermission("visits:write"), async (req, res) => {
   const visit = await prisma.visit.findUnique({ where: { id: req.params.id } });
   if (!visit) return res.status(404).json({ error: "Não encontrada" });
   if (visit.condominiumId && visit.condominiumId !== req.condominiumId) {

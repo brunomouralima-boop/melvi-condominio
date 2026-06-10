@@ -3,6 +3,7 @@ import { z } from "zod";
 import { Role, MeterType } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate, authorize } from "../middleware/auth";
+import { requirePermission } from "../middleware/permission";
 import { resolveCondominium } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 
@@ -106,7 +107,7 @@ const createSchema = z.object({
   generatorConfig: generatorConfigSchema.optional(),
 });
 
-router.post("/", authorize(Role.ADMIN), validateBody(createSchema), async (req, res) => {
+router.post("/", authorize(Role.ADMIN), requirePermission("meters:write"), validateBody(createSchema), async (req, res) => {
   const body = req.body as z.infer<typeof createSchema>;
   if (body.type === "GENERATOR" && !body.generatorConfig) {
     return res.status(400).json({ error: "generatorConfig é obrigatório para medidores do tipo GENERATOR." });
@@ -179,7 +180,7 @@ const updateSchema = z.object({
   generatorConfig: generatorConfigSchema.partial().optional(),
 });
 
-router.put("/:id", authorize(Role.ADMIN), validateBody(updateSchema), async (req, res) => {
+router.put("/:id", authorize(Role.ADMIN), requirePermission("meters:write"), validateBody(updateSchema), async (req, res) => {
   const body = req.body as z.infer<typeof updateSchema>;
   const { generatorConfig, ...rest } = body;
 
@@ -211,7 +212,7 @@ router.put("/:id", authorize(Role.ADMIN), validateBody(updateSchema), async (req
   res.json(updated);
 });
 
-router.delete("/:id", authorize(Role.ADMIN), async (req, res) => {
+router.delete("/:id", authorize(Role.ADMIN), requirePermission("meters:write"), async (req, res) => {
   await prisma.meter.update({ where: { id: req.params.id }, data: { isActive: false } });
   res.json({ ok: true });
 });
@@ -241,7 +242,7 @@ const readingSchema = z.object({
   isReset: z.boolean().optional(),
 });
 
-router.post("/:id/readings", authorize(Role.ADMIN), validateBody(readingSchema), async (req, res) => {
+router.post("/:id/readings", authorize(Role.ADMIN), requirePermission("meters:write"), validateBody(readingSchema), async (req, res) => {
   const body = req.body as z.infer<typeof readingSchema>;
   const meter = await prisma.meter.findUnique({ where: { id: req.params.id }, include: { generatorConfig: true } });
   if (!meter) return res.status(404).json({ error: "Meter not found" });
@@ -298,7 +299,7 @@ router.post("/:id/readings", authorize(Role.ADMIN), validateBody(readingSchema),
   }
 });
 
-router.put("/:id/readings/:readingId", authorize(Role.ADMIN), async (req, res) => {
+router.put("/:id/readings/:readingId", authorize(Role.ADMIN), requirePermission("meters:write"), async (req, res) => {
   const schema = z.object({ readingValue: z.number(), notes: z.string().optional().nullable() });
   const body = schema.parse(req.body);
   const target = await prisma.meterReading.findUnique({ where: { id: req.params.readingId } });
@@ -312,7 +313,7 @@ router.put("/:id/readings/:readingId", authorize(Role.ADMIN), async (req, res) =
   res.json(updated);
 });
 
-router.delete("/:id/readings/:readingId", authorize(Role.ADMIN), async (req, res) => {
+router.delete("/:id/readings/:readingId", authorize(Role.ADMIN), requirePermission("meters:write"), async (req, res) => {
   // só a leitura mais recente
   const latest = await prisma.meterReading.findFirst({ where: { meterId: req.params.id }, orderBy: { readingDate: "desc" } });
   if (!latest || latest.id !== req.params.readingId) {
@@ -329,7 +330,7 @@ const maintenanceSchema = z.object({
   maintenanceDate: z.string().datetime().optional(),
 });
 
-router.patch("/:id/generator/maintenance", authorize(Role.ADMIN), validateBody(maintenanceSchema), async (req, res) => {
+router.patch("/:id/generator/maintenance", authorize(Role.ADMIN), requirePermission("meters:write"), validateBody(maintenanceSchema), async (req, res) => {
   const { currentHours, notes, maintenanceDate } = req.body as z.infer<typeof maintenanceSchema>;
   const meter = await prisma.meter.findUnique({ where: { id: req.params.id }, include: { generatorConfig: true } });
   if (!meter || meter.type !== "GENERATOR" || !meter.generatorConfig) {

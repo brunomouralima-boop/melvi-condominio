@@ -9,6 +9,7 @@ import {
 } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate, authorize } from "../middleware/auth";
+import { requirePermission } from "../middleware/permission";
 import { resolveCondominium, tenantWhere } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 
@@ -16,6 +17,7 @@ const router = Router();
 router.use(authenticate);
 router.use(authorize(Role.ADMIN));
 router.use(resolveCondominium);
+router.use(requirePermission("maintenance:write"));
 
 // ---------------------------------------------------------------------------
 // Helpers

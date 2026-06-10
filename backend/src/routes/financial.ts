@@ -4,6 +4,7 @@ import { z } from "zod";
 import { Role, FinancialType } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate, authorize } from "../middleware/auth";
+import { requirePermission } from "../middleware/permission";
 import { resolveCondominium, tenantWhere, scopeWhere } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 
@@ -57,7 +58,7 @@ const createSchema = z.object({
   receiptUrl: z.string().optional().nullable(),
 });
 
-router.post("/records", authorize(Role.ADMIN), validateBody(createSchema), async (req, res) => {
+router.post("/records", authorize(Role.ADMIN), requirePermission("financial:write"), validateBody(createSchema), async (req, res) => {
   const body = req.body as z.infer<typeof createSchema>;
   const item = await prisma.financialRecord.create({
     data: {
@@ -84,7 +85,7 @@ const paySchema = z.object({
   receiptUrl: z.string().optional().nullable(),
 });
 
-router.post("/records/:id/pay", authorize(Role.ADMIN), validateBody(paySchema), async (req, res) => {
+router.post("/records/:id/pay", authorize(Role.ADMIN), requirePermission("financial:write"), validateBody(paySchema), async (req, res) => {
   const body = req.body as z.infer<typeof paySchema>;
   const existing = await prisma.financialRecord.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: "Lançamento não encontrado" });
@@ -102,7 +103,7 @@ router.post("/records/:id/pay", authorize(Role.ADMIN), validateBody(paySchema), 
   res.json(item);
 });
 
-router.post("/records/:id/unpay", authorize(Role.ADMIN), async (req, res) => {
+router.post("/records/:id/unpay", authorize(Role.ADMIN), requirePermission("financial:write"), async (req, res) => {
   const existing = await prisma.financialRecord.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: "Lançamento não encontrado" });
   if (existing.condominiumId && existing.condominiumId !== req.condominiumId) {
@@ -131,7 +132,7 @@ const batchSchema = z.object({
   skipExisting: z.boolean().optional().default(true),
 });
 
-router.post("/charges/batch", authorize(Role.ADMIN), validateBody(batchSchema), async (req, res) => {
+router.post("/charges/batch", authorize(Role.ADMIN), requirePermission("financial:write"), validateBody(batchSchema), async (req, res) => {
   const body = req.body as z.infer<typeof batchSchema>;
 
   // 1. Frações activas alvo
@@ -235,7 +236,7 @@ router.post("/charges/batch", authorize(Role.ADMIN), validateBody(batchSchema), 
 // ---------------------------------------------------------------------------
 // Resumo financeiro (KPIs do dashboard / página financeiro)
 // ---------------------------------------------------------------------------
-router.get("/summary", authorize(Role.ADMIN), async (req, res) => {
+router.get("/summary", authorize(Role.ADMIN), requirePermission("financial:write"), async (req, res) => {
   const now = new Date();
   const month = new Date();
   month.setDate(1);
@@ -289,7 +290,7 @@ router.get("/summary", authorize(Role.ADMIN), async (req, res) => {
 // ---------------------------------------------------------------------------
 // Inadimplência (agregado por fração)
 // ---------------------------------------------------------------------------
-router.get("/delinquency", authorize(Role.ADMIN), async (req, res) => {
+router.get("/delinquency", authorize(Role.ADMIN), requirePermission("financial:write"), async (req, res) => {
   const now = new Date();
   const overdue = await prisma.financialRecord.findMany({
     where: { ...tenantWhere(req), type: FinancialType.INCOME, paidDate: null, dueDate: { lt: now }, fractionId: { not: null } },
@@ -351,7 +352,7 @@ router.get("/fraction/:id/statement", async (req, res) => {
 // ---------------------------------------------------------------------------
 // Relatório financeiro anual (agregação)
 // ---------------------------------------------------------------------------
-router.get("/report", authorize(Role.ADMIN), async (req, res) => {
+router.get("/report", authorize(Role.ADMIN), requirePermission("financial:write"), async (req, res) => {
   const year = Number(req.query.year) || new Date().getFullYear();
   const start = new Date(year, 0, 1, 0, 0, 0, 0);
   const end = new Date(year, 11, 31, 23, 59, 59, 999);

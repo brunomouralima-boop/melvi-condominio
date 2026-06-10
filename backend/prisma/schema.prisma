@@ -13,10 +13,18 @@ datasource db {
 // Enums
 // ────────────────────────────────────────────────────────────
 enum Role {
-  ADMIN_ORG  // administrador de organização (gere vários condomínios)
-  ADMIN      // síndico / admin de um condomínio
+  SUPER_ADMIN // administrador da plataforma Melvi (acima de todas as organizações)
+  ADMIN_ORG   // administrador de organização (gere vários condomínios)
+  ADMIN       // síndico / admin de um condomínio
   RESIDENT
   DOORMAN
+}
+
+// Efeito de uma permissão atribuída individualmente a um utilizador, por cima
+// dos defaults do seu papel (Role). GRANT concede; DENY revoga explicitamente.
+enum PermissionEffect {
+  GRANT
+  DENY
 }
 
 enum FractionType {
@@ -256,6 +264,9 @@ model User {
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
+  // Permissões individuais (overlay GRANT/DENY por cima dos defaults do papel)
+  permissions         UserPermission[]
+
   dependents          Dependent[]
   domesticEmployees   DomesticEmployee[]
   vehicles            Vehicle[]
@@ -288,6 +299,24 @@ model RefreshToken {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   createdAt DateTime @default(now())
+}
+
+// Permissão individual atribuída a um utilizador, identificada por uma chave
+// `modulo:accao` (ex.: "financial:write"). Sobrepõe-se aos defaults do papel:
+//   - effect=GRANT → concede a permissão mesmo que o papel não a tenha.
+//   - effect=DENY  → revoga a permissão mesmo que o papel a tenha.
+// O SUPER_ADMIN ignora este overlay (tem sempre tudo).
+model UserPermission {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key       String           // chave do catálogo de permissões (modulo:accao)
+  effect    PermissionEffect @default(GRANT)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@unique([userId, key])
+  @@index([userId])
 }
 
 model Dependent {

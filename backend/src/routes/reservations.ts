@@ -3,6 +3,7 @@ import { z } from "zod";
 import { Role, ReservationStatus } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate, authorize } from "../middleware/auth";
+import { requirePermission } from "../middleware/permission";
 import { resolveCondominium, tenantWhere } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 import { emitToUser } from "../sockets";
@@ -35,7 +36,7 @@ const createSchema = z.object({
   fractionId: z.string().uuid().optional(),
 });
 
-router.post("/", validateBody(createSchema), async (req, res) => {
+router.post("/", requirePermission("reservations:write"), validateBody(createSchema), async (req, res) => {
   const body = req.body as z.infer<typeof createSchema>;
   if (req.user!.role === Role.RESIDENT && !req.user!.fractionId) {
     return res.status(400).json({ error: "You are not associated with a fraction" });
@@ -63,7 +64,7 @@ const statusSchema = z.object({
   status: z.nativeEnum(ReservationStatus),
 });
 
-router.put("/:id/status", authorize(Role.ADMIN), validateBody(statusSchema), async (req, res) => {
+router.put("/:id/status", authorize(Role.ADMIN), requirePermission("reservations:write"), validateBody(statusSchema), async (req, res) => {
   const existing = await prisma.reservation.findUnique({ where: { id: req.params.id }, select: { condominiumId: true } });
   if (!existing) return res.status(404).json({ error: "Not found" });
   if (existing.condominiumId && existing.condominiumId !== req.condominiumId) {
@@ -77,7 +78,7 @@ router.put("/:id/status", authorize(Role.ADMIN), validateBody(statusSchema), asy
   res.json(updated);
 });
 
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", requirePermission("reservations:write"), async (req, res) => {
   const item = await prisma.reservation.findUnique({ where: { id: req.params.id } });
   if (!item) return res.status(404).json({ error: "Not found" });
   if (item.condominiumId && item.condominiumId !== req.condominiumId) {

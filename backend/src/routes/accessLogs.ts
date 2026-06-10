@@ -3,6 +3,7 @@ import { z } from "zod";
 import { Role, AccessLogType, AccessMethod } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate, authorize } from "../middleware/auth";
+import { requirePermission } from "../middleware/permission";
 import { resolveCondominium, tenantWhere } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 import { emitToRole } from "../sockets";
@@ -52,7 +53,7 @@ const createSchema = z.object({
   notes: z.string().optional().nullable(),
 });
 
-router.post("/", authorize(Role.DOORMAN, Role.ADMIN), validateBody(createSchema), async (req, res) => {
+router.post("/", authorize(Role.DOORMAN, Role.ADMIN), requirePermission("access-logs:write"), validateBody(createSchema), async (req, res) => {
   const body = req.body as z.infer<typeof createSchema>;
   const log = await prisma.accessLog.create({
     data: {

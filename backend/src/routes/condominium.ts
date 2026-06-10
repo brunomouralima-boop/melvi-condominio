@@ -2,6 +2,7 @@ import { Router } from "express";
 import { Role } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate, authorize } from "../middleware/auth";
+import { requirePermission } from "../middleware/permission";
 import { resolveCondominium, tenantWhere } from "../middleware/tenant";
 
 const router = Router();
@@ -24,7 +25,7 @@ router.get("/", async (req, res) => {
 });
 
 // Admin dashboard stats
-router.get("/stats", authorize(Role.ADMIN), async (req, res) => {
+router.get("/stats", authorize(Role.ADMIN), requirePermission("condominium:write"), async (req, res) => {
   const scope = tenantWhere(req);
   // Residentes do condomínio activo — tolerante a nulos (pré-backfill): conta
   // quem tem membership neste condomínio OU quem ainda não tem membership.

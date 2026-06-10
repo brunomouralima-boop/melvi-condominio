@@ -7,6 +7,7 @@ import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../utils/
 import { authenticate } from "../middleware/auth";
 import { resolveCondominium } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
+import { resolvePermissions, isSuperAdmin, PermissionOverride } from "../auth/permissions";
 
 const router = Router();
 
@@ -90,6 +91,7 @@ router.get("/me", authenticate, resolveCondominium, async (req, res) => {
       fraction: {
         include: { tower: true },
       },
+      permissions: { select: { key: true, effect: true } },
     },
   });
   if (!user) return res.status(404).json({ error: "User not found" });
@@ -104,9 +106,19 @@ router.get("/me", authenticate, resolveCondominium, async (req, res) => {
       })
     : [];
 
-  const { password: _p, ...safe } = user;
+  // Permissões efectivas (defaults do papel + overlay GRANT/DENY). Resolvidas no
+  // back-end; o front usa-as apenas para mostrar/esconder UI.
+  const overrides: PermissionOverride[] = user.permissions.map((p) => ({
+    key: p.key,
+    effect: p.effect === "DENY" ? "DENY" : "GRANT",
+  }));
+  const permissions = resolvePermissions(user.role, overrides);
+
+  const { password: _p, permissions: _perms, ...safe } = user;
   res.json({
     ...safe,
+    isSuperAdmin: isSuperAdmin(user.role),
+    permissions,
     condominiums,
     activeCondominiumId: req.condominiumId ?? null,
   });

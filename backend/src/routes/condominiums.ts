@@ -3,6 +3,7 @@ import { z } from "zod";
 import { Role } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate, authorize } from "../middleware/auth";
+import { requirePermission } from "../middleware/permission";
 import { resolveCondominium } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 
@@ -52,7 +53,7 @@ const createSchema = z.object({
   website: z.string().optional().nullable(),
 });
 
-router.post("/", authorize(Role.ADMIN), validateBody(createSchema), async (req, res) => {
+router.post("/", authorize(Role.ADMIN), requirePermission("condominiums:write"), validateBody(createSchema), async (req, res) => {
   const body = req.body as z.infer<typeof createSchema>;
   // Liga o novo condomínio à organização do criador e garante-lhe acesso
   // (ADMIN_ORG acede via organização, mas um ADMIN precisa de Membership).
@@ -96,13 +97,13 @@ const updateSchema = createSchema.partial().extend({
   settings: z.any().optional(),
 });
 
-router.put("/:id", authorize(Role.ADMIN), validateBody(updateSchema), async (req, res) => {
+router.put("/:id", authorize(Role.ADMIN), requirePermission("condominiums:write"), validateBody(updateSchema), async (req, res) => {
   if (!ensureAccessible(req, res, req.params.id)) return;
   const updated = await prisma.condominium.update({ where: { id: req.params.id }, data: req.body });
   res.json(updated);
 });
 
-router.delete("/:id", authorize(Role.ADMIN), async (req, res) => {
+router.delete("/:id", authorize(Role.ADMIN), requirePermission("condominiums:write"), async (req, res) => {
   if (!ensureAccessible(req, res, req.params.id)) return;
   const active = await prisma.fraction.count({
     where: { tower: { condominiumId: req.params.id }, isActive: true },
@@ -135,7 +136,7 @@ router.get("/:id/permillage-check", async (req, res) => {
 // Quem tem acesso a este condomínio e com que papel. ADMIN_ORG gere todos
 // os condomínios da organização; um ADMIN gere o(s) seu(s) (via ensureAccessible).
 
-router.get("/:id/members", authorize(Role.ADMIN), async (req, res) => {
+router.get("/:id/members", authorize(Role.ADMIN), requirePermission("condominiums:write"), async (req, res) => {
   if (!ensureAccessible(req, res, req.params.id)) return;
   const members = await prisma.membership.findMany({
     where: { condominiumId: req.params.id },
@@ -152,7 +153,7 @@ const memberSchema = z.object({
   role: z.nativeEnum(Role),
 });
 
-router.post("/:id/members", authorize(Role.ADMIN), validateBody(memberSchema), async (req, res) => {
+router.post("/:id/members", authorize(Role.ADMIN), requirePermission("condominiums:write"), validateBody(memberSchema), async (req, res) => {
   if (!ensureAccessible(req, res, req.params.id)) return;
   const { userId, role } = req.body as z.infer<typeof memberSchema>;
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
@@ -168,7 +169,7 @@ router.post("/:id/members", authorize(Role.ADMIN), validateBody(memberSchema), a
 
 const memberRoleSchema = z.object({ role: z.nativeEnum(Role) });
 
-router.patch("/:id/members/:userId", authorize(Role.ADMIN), validateBody(memberRoleSchema), async (req, res) => {
+router.patch("/:id/members/:userId", authorize(Role.ADMIN), requirePermission("condominiums:write"), validateBody(memberRoleSchema), async (req, res) => {
   if (!ensureAccessible(req, res, req.params.id)) return;
   const { role } = req.body as z.infer<typeof memberRoleSchema>;
   const existing = await prisma.membership.findUnique({
@@ -182,7 +183,7 @@ router.patch("/:id/members/:userId", authorize(Role.ADMIN), validateBody(memberR
   res.json(updated);
 });
 
-router.delete("/:id/members/:userId", authorize(Role.ADMIN), async (req, res) => {
+router.delete("/:id/members/:userId", authorize(Role.ADMIN), requirePermission("condominiums:write"), async (req, res) => {
   if (!ensureAccessible(req, res, req.params.id)) return;
   // Impede remover o próprio acesso (evita auto-bloqueio).
   if (req.params.userId === req.user!.sub) {

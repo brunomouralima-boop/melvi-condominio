@@ -3,6 +3,7 @@ import { z } from "zod";
 import { Role, OccurrenceCategory, OccurrenceStatus, OccurrencePriority } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate, authorize } from "../middleware/auth";
+import { requirePermission } from "../middleware/permission";
 import { resolveCondominium, tenantWhere } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 import { emitToUser, emitToRole } from "../sockets";
@@ -58,7 +59,7 @@ const createSchema = z.object({
   fractionId: z.string().uuid().optional(),
 });
 
-router.post("/", validateBody(createSchema), async (req, res) => {
+router.post("/", requirePermission("occurrences:write"), validateBody(createSchema), async (req, res) => {
   const body = req.body as z.infer<typeof createSchema>;
   if (req.user!.role === Role.RESIDENT && !req.user!.fractionId) {
     return res.status(400).json({ error: "You are not associated with a fraction" });
@@ -113,7 +114,7 @@ const updateSchema = z.object({
   assignedToId: z.string().uuid().optional().nullable(),
 });
 
-router.put("/:id", validateBody(updateSchema), async (req, res) => {
+router.put("/:id", requirePermission("occurrences:write"), validateBody(updateSchema), async (req, res) => {
   const item = await prisma.occurrence.findUnique({ where: { id: req.params.id } });
   if (!item) return res.status(404).json({ error: "Not found" });
   if (item.condominiumId && item.condominiumId !== req.condominiumId) {
@@ -140,7 +141,7 @@ const responseSchema = z.object({
   status: z.nativeEnum(OccurrenceStatus).optional(),
 });
 
-router.post("/:id/response", authorize(Role.ADMIN), validateBody(responseSchema), async (req, res) => {
+router.post("/:id/response", authorize(Role.ADMIN), requirePermission("occurrences:write"), validateBody(responseSchema), async (req, res) => {
   const body = req.body as z.infer<typeof responseSchema>;
   const existing = await prisma.occurrence.findUnique({ where: { id: req.params.id }, select: { condominiumId: true } });
   if (!existing) return res.status(404).json({ error: "Not found" });

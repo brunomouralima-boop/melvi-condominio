@@ -4,6 +4,7 @@ import crypto from "crypto";
 import { Role } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate, authorize } from "../middleware/auth";
+import { requirePermission } from "../middleware/permission";
 import { resolveCondominium } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 import { hashPassword } from "../utils/password";
@@ -12,7 +13,7 @@ const router = Router();
 router.use(authenticate);
 router.use(resolveCondominium);
 
-router.get("/", authorize(Role.ADMIN), async (req, res) => {
+router.get("/", authorize(Role.ADMIN), requirePermission("users:write"), async (req, res) => {
   const { role, search, includeInactive } = req.query as { role?: Role; search?: string; includeInactive?: string };
   // Scoping multi-tenant: o User não tem `condominiumId` próprio, liga-se ao
   // condomínio via Membership. Compomos com AND (a pesquisa já usa OR) e somos
@@ -60,7 +61,7 @@ const createUserSchema = z.object({
   unitId: z.string().uuid().optional().nullable(), // legacy
 });
 
-router.post("/", authorize(Role.ADMIN), validateBody(createUserSchema), async (req, res) => {
+router.post("/", authorize(Role.ADMIN), requirePermission("users:write"), validateBody(createUserSchema), async (req, res) => {
   const body = req.body as z.infer<typeof createUserSchema>;
   const fractionId = body.fractionId ?? body.unitId ?? null;
   const hashed = await hashPassword(body.password);
@@ -98,7 +99,7 @@ const updateUserSchema = z.object({
   role: z.nativeEnum(Role).optional(),
 });
 
-router.put("/:id", authorize(Role.ADMIN), validateBody(updateUserSchema), async (req, res) => {
+router.put("/:id", authorize(Role.ADMIN), requirePermission("users:write"), validateBody(updateUserSchema), async (req, res) => {
   const body = req.body as z.infer<typeof updateUserSchema>;
   const { unitId, ...data } = body;
   if (unitId !== undefined && data.fractionId === undefined) (data as any).fractionId = unitId;
@@ -108,7 +109,7 @@ router.put("/:id", authorize(Role.ADMIN), validateBody(updateUserSchema), async 
 });
 
 // Activate user
-router.patch("/:id/activate", authorize(Role.ADMIN), async (req, res) => {
+router.patch("/:id/activate", authorize(Role.ADMIN), requirePermission("users:write"), async (req, res) => {
   const updated = await prisma.user.update({
     where: { id: req.params.id },
     data: { isActive: true },
@@ -118,7 +119,7 @@ router.patch("/:id/activate", authorize(Role.ADMIN), async (req, res) => {
 });
 
 // Deactivate user — invalidates tokens and disables active QR codes
-router.patch("/:id/deactivate", authorize(Role.ADMIN), async (req, res) => {
+router.patch("/:id/deactivate", authorize(Role.ADMIN), requirePermission("users:write"), async (req, res) => {
   if (req.params.id === req.user!.sub) {
     return res.status(400).json({ error: "Não pode desactivar o próprio utilizador." });
   }
@@ -134,7 +135,7 @@ router.patch("/:id/deactivate", authorize(Role.ADMIN), async (req, res) => {
 });
 
 // DELETE — anonymize + soft delete. Blocks if user owns active fraction.
-router.delete("/:id", authorize(Role.ADMIN), async (req, res) => {
+router.delete("/:id", authorize(Role.ADMIN), requirePermission("users:write"), async (req, res) => {
   if (req.params.id === req.user!.sub) {
     return res.status(400).json({ error: "Não pode eliminar o próprio utilizador." });
   }
@@ -167,7 +168,7 @@ router.delete("/:id", authorize(Role.ADMIN), async (req, res) => {
   res.json({ ok: true });
 });
 
-router.post("/:id/reset-password", authorize(Role.ADMIN), async (req, res) => {
+router.post("/:id/reset-password", authorize(Role.ADMIN), requirePermission("users:write"), async (req, res) => {
   const newPassword = (req.body as { newPassword?: string }).newPassword;
   if (!newPassword || newPassword.length < 8) {
     return res.status(400).json({ error: "Password must be at least 8 chars" });

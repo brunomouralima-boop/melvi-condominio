@@ -8,6 +8,7 @@ import { Role, DocumentCategory } from "@prisma/client";
 import { prisma } from "../prisma";
 import { config } from "../config";
 import { authenticate, authorize } from "../middleware/auth";
+import { requirePermission } from "../middleware/permission";
 import { resolveCondominium, tenantWhere } from "../middleware/tenant";
 
 const router = Router();
@@ -124,7 +125,7 @@ router.get("/:id/download", async (req, res, next) => {
 // ---------------------------------------------------------------------------
 // Upload de documento (admin)
 // ---------------------------------------------------------------------------
-router.post("/", authorize(Role.ADMIN), docUpload.single("file"), async (req, res, next) => {
+router.post("/", authorize(Role.ADMIN), requirePermission("documents:write"), docUpload.single("file"), async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ error: "Ficheiro em falta" });
     const title = (req.body.title ?? "").toString().trim();
@@ -160,7 +161,7 @@ router.post("/", authorize(Role.ADMIN), docUpload.single("file"), async (req, re
 // ---------------------------------------------------------------------------
 // Atualizar metadados (admin)
 // ---------------------------------------------------------------------------
-router.put("/:id", authorize(Role.ADMIN), async (req, res) => {
+router.put("/:id", authorize(Role.ADMIN), requirePermission("documents:write"), async (req, res) => {
   const existing = await prisma.document.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: "Documento não encontrado" });
   if (existing.condominiumId && existing.condominiumId !== req.condominiumId) {
@@ -184,7 +185,7 @@ router.put("/:id", authorize(Role.ADMIN), async (req, res) => {
 // ---------------------------------------------------------------------------
 // Apagar (admin) — remove registo e ficheiro
 // ---------------------------------------------------------------------------
-router.delete("/:id", authorize(Role.ADMIN), async (req, res) => {
+router.delete("/:id", authorize(Role.ADMIN), requirePermission("documents:write"), async (req, res) => {
   const doc = await prisma.document.findUnique({ where: { id: req.params.id } });
   if (!doc) return res.status(404).json({ error: "Documento não encontrado" });
   if (doc.condominiumId && doc.condominiumId !== req.condominiumId) {

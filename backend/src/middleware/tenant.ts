@@ -18,6 +18,7 @@ declare global {
 /**
  * Resolve o condomínio activo do pedido (multi-tenant).
  *
+ * - SUPER_ADMIN → todos os condomínios activos da plataforma (todas as orgs).
  * - ADMIN_ORG → todos os condomínios da sua organização.
  * - Restantes papéis → condomínios em que têm Membership.
  * - Fallback (pré-backfill / 1 condomínio) → o único condomínio existente.
@@ -32,7 +33,14 @@ export async function resolveCondominium(req: Request, _res: Response, next: Nex
   try {
     let accessible: string[] = [];
 
-    if (req.user.role === Role.ADMIN_ORG) {
+    if (req.user.role === Role.SUPER_ADMIN) {
+      // Plataforma: vê todos os condomínios activos, de qualquer organização.
+      const condos = await prisma.condominium.findMany({
+        where: { isActive: true },
+        select: { id: true },
+      });
+      accessible = condos.map((c) => c.id);
+    } else if (req.user.role === Role.ADMIN_ORG) {
       const u = await prisma.user.findUnique({
         where: { id: req.user.sub },
         select: { organizationId: true },

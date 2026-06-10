@@ -3,6 +3,7 @@ import { z } from "zod";
 import { Role, AnnouncementType } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate, authorize } from "../middleware/auth";
+import { requirePermission } from "../middleware/permission";
 import { resolveCondominium, tenantWhere } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 import { emitToRole } from "../sockets";
@@ -28,7 +29,7 @@ const createSchema = z.object({
   attachments: z.array(z.string()).optional(),
 });
 
-router.post("/", authorize(Role.ADMIN), validateBody(createSchema), async (req, res) => {
+router.post("/", authorize(Role.ADMIN), requirePermission("announcements:write"), validateBody(createSchema), async (req, res) => {
   const body = req.body as z.infer<typeof createSchema>;
   const item = await prisma.announcement.create({
     data: {
@@ -67,7 +68,7 @@ async function assertSameCondo(req: any, res: any): Promise<boolean> {
   return true;
 }
 
-router.put("/:id", authorize(Role.ADMIN), async (req, res) => {
+router.put("/:id", authorize(Role.ADMIN), requirePermission("announcements:write"), async (req, res) => {
   if (!(await assertSameCondo(req, res))) return;
   const item = await prisma.announcement.update({
     where: { id: req.params.id },
@@ -76,7 +77,7 @@ router.put("/:id", authorize(Role.ADMIN), async (req, res) => {
   res.json(item);
 });
 
-router.delete("/:id", authorize(Role.ADMIN), async (req, res) => {
+router.delete("/:id", authorize(Role.ADMIN), requirePermission("announcements:write"), async (req, res) => {
   if (!(await assertSameCondo(req, res))) return;
   await prisma.announcement.delete({ where: { id: req.params.id } });
   res.json({ ok: true });

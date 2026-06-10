@@ -5,6 +5,7 @@ import rateLimit from "express-rate-limit";
 import { Role, QRAccessType, AccessLogType, AccessMethod } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate, authorize } from "../middleware/auth";
+import { requirePermission } from "../middleware/permission";
 import { resolveCondominium, tenantWhere } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 import { signQR, verifyQR, generateQRImage, generateShortCode } from "../utils/qr";
@@ -90,7 +91,7 @@ const createSchema = z.object({
   maxUses: z.number().int().positive().default(1),
 });
 
-router.post("/", validateBody(createSchema), async (req, res) => {
+router.post("/", requirePermission("qr-codes:write"), validateBody(createSchema), async (req, res) => {
   const body = req.body as z.infer<typeof createSchema>;
   if (req.user!.role !== Role.RESIDENT) {
     return res.status(403).json({ error: "Only residents can create QR codes" });
@@ -143,7 +144,7 @@ router.post("/", validateBody(createSchema), async (req, res) => {
   res.status(201).json(created);
 });
 
-router.put("/:id/deactivate", async (req, res) => {
+router.put("/:id/deactivate", requirePermission("qr-codes:write"), async (req, res) => {
   const qr = await prisma.qRAccessCode.findUnique({ where: { id: req.params.id } });
   if (!qr) return res.status(404).json({ error: "Not found" });
   if (qr.condominiumId && qr.condominiumId !== req.condominiumId) {
@@ -171,7 +172,7 @@ const validateSchema = z
     message: "qrCodeData ou shortCode obrigatório",
   });
 
-router.post("/validate", validateLimiter, authorize(Role.DOORMAN, Role.ADMIN), validateBody(validateSchema), async (req, res) => {
+router.post("/validate", validateLimiter, authorize(Role.DOORMAN, Role.ADMIN), requirePermission("qr-codes:write"), validateBody(validateSchema), async (req, res) => {
   const { qrCodeData, shortCode } = req.body as z.infer<typeof validateSchema>;
 
   let qrId: string | null = null;

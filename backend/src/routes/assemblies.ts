@@ -9,6 +9,7 @@ import {
 } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate, authorize, isAdmin } from "../middleware/auth";
+import { requirePermission } from "../middleware/permission";
 import { resolveCondominium, tenantWhere } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 
@@ -136,7 +137,7 @@ const assemblySchema = z.object({
   quorumPermillage: z.number().nonnegative().optional().nullable(),
 });
 
-router.post("/", authorize(Role.ADMIN), validateBody(assemblySchema), async (req, res) => {
+router.post("/", authorize(Role.ADMIN), requirePermission("assemblies:write"), validateBody(assemblySchema), async (req, res) => {
   const b = req.body as z.infer<typeof assemblySchema>;
   const a = await prisma.assembly.create({
     data: {
@@ -154,7 +155,7 @@ router.post("/", authorize(Role.ADMIN), validateBody(assemblySchema), async (req
   res.status(201).json(a);
 });
 
-router.put("/:id", authorize(Role.ADMIN), validateBody(assemblySchema.partial()), async (req, res) => {
+router.put("/:id", authorize(Role.ADMIN), requirePermission("assemblies:write"), validateBody(assemblySchema.partial()), async (req, res) => {
   const existing = await prisma.assembly.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: "Assembleia não encontrada" });
   if (existing.condominiumId && existing.condominiumId !== req.condominiumId) {
@@ -173,7 +174,7 @@ router.put("/:id", authorize(Role.ADMIN), validateBody(assemblySchema.partial())
   res.json(a);
 });
 
-router.delete("/:id", authorize(Role.ADMIN), async (req, res) => {
+router.delete("/:id", authorize(Role.ADMIN), requirePermission("assemblies:write"), async (req, res) => {
   const existing = await prisma.assembly.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: "Assembleia não encontrada" });
   if (existing.condominiumId && existing.condominiumId !== req.condominiumId) {
@@ -193,7 +194,7 @@ const agendaSchema = z.object({
   requiresVote: z.boolean().optional(),
 });
 
-router.post("/:id/agenda", authorize(Role.ADMIN), validateBody(agendaSchema), async (req, res) => {
+router.post("/:id/agenda", authorize(Role.ADMIN), requirePermission("assemblies:write"), validateBody(agendaSchema), async (req, res) => {
   const assembly = await prisma.assembly.findUnique({ where: { id: req.params.id } });
   if (!assembly) return res.status(404).json({ error: "Assembleia não encontrada" });
   if (assembly.condominiumId && assembly.condominiumId !== req.condominiumId) {
@@ -213,7 +214,7 @@ router.post("/:id/agenda", authorize(Role.ADMIN), validateBody(agendaSchema), as
   res.status(201).json(item);
 });
 
-router.put("/:id/agenda/:itemId", authorize(Role.ADMIN), validateBody(agendaSchema.partial()), async (req, res) => {
+router.put("/:id/agenda/:itemId", authorize(Role.ADMIN), requirePermission("assemblies:write"), validateBody(agendaSchema.partial()), async (req, res) => {
   const item = await prisma.agendaItem.findUnique({
     where: { id: req.params.itemId },
     include: { assembly: { select: { condominiumId: true } } },
@@ -232,7 +233,7 @@ router.put("/:id/agenda/:itemId", authorize(Role.ADMIN), validateBody(agendaSche
   res.json(updated);
 });
 
-router.delete("/:id/agenda/:itemId", authorize(Role.ADMIN), async (req, res) => {
+router.delete("/:id/agenda/:itemId", authorize(Role.ADMIN), requirePermission("assemblies:write"), async (req, res) => {
   const item = await prisma.agendaItem.findUnique({
     where: { id: req.params.itemId },
     include: { assembly: { select: { condominiumId: true } } },
@@ -246,7 +247,7 @@ router.delete("/:id/agenda/:itemId", authorize(Role.ADMIN), async (req, res) => 
 });
 
 // Abrir votação (admin)
-router.post("/:id/agenda/:itemId/open", authorize(Role.ADMIN), async (req, res) => {
+router.post("/:id/agenda/:itemId/open", authorize(Role.ADMIN), requirePermission("assemblies:write"), async (req, res) => {
   const item = await prisma.agendaItem.findUnique({
     where: { id: req.params.itemId },
     include: { assembly: { select: { condominiumId: true } } },
@@ -263,7 +264,7 @@ router.post("/:id/agenda/:itemId/open", authorize(Role.ADMIN), async (req, res) 
 });
 
 // Fechar votação + apurar (admin)
-router.post("/:id/agenda/:itemId/close", authorize(Role.ADMIN), async (req, res) => {
+router.post("/:id/agenda/:itemId/close", authorize(Role.ADMIN), requirePermission("assemblies:write"), async (req, res) => {
   const item = await prisma.agendaItem.findUnique({
     where: { id: req.params.itemId },
     include: { votes: true, assembly: { select: { condominiumId: true } } },

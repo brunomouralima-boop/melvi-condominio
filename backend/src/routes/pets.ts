@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../prisma";
 import { authenticate, isAdmin } from "../middleware/auth";
+import { requirePermission } from "../middleware/permission";
 import { resolveCondominium, ownerCondoScope } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 
@@ -28,7 +29,7 @@ const createSchema = z.object({
   notes: z.string().optional().nullable(),
 });
 
-router.post("/", validateBody(createSchema), async (req, res) => {
+router.post("/", requirePermission("pets:write"), validateBody(createSchema), async (req, res) => {
   const body = req.body as z.infer<typeof createSchema>;
   const pet = await prisma.pet.create({
     data: {
@@ -43,7 +44,7 @@ router.post("/", validateBody(createSchema), async (req, res) => {
   res.status(201).json(pet);
 });
 
-router.put("/:id", async (req, res) => {
+router.put("/:id", requirePermission("pets:write"), async (req, res) => {
   const pet = await prisma.pet.findUnique({ where: { id: req.params.id } });
   if (!pet) return res.status(404).json({ error: "Not found" });
   if (!isAdmin(req.user!.role) && pet.userId !== req.user!.sub) {
@@ -53,7 +54,7 @@ router.put("/:id", async (req, res) => {
   res.json(updated);
 });
 
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", requirePermission("pets:write"), async (req, res) => {
   const pet = await prisma.pet.findUnique({ where: { id: req.params.id } });
   if (!pet) return res.status(404).json({ error: "Not found" });
   if (!isAdmin(req.user!.role) && pet.userId !== req.user!.sub) {

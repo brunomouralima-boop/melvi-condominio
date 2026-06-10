@@ -26,9 +26,15 @@
 // ────────────────────────────────────────────────────────────────────────────
 import { PrismaClient, Role } from "@prisma/client";
 import { randomBytes } from "crypto";
-import { hashPassword } from "../src/utils/password";
+import bcrypt from "bcrypt";
 
 const prisma = new PrismaClient();
+
+// bcrypt (12 rounds) inline — este script é executado pelo `tsx` dentro do
+// container de produção, que NÃO inclui a pasta `src/`. Por isso não importamos
+// de `../src/utils/password` (mantém o mesmo custo/algoritmo).
+const SALT_ROUNDS = 12;
+const hashPassword = (plain: string) => bcrypt.hash(plain, SALT_ROUNDS);
 
 /** Gera uma palavra-passe aleatória forte (base64url, ~24 caracteres). */
 function generatePassword(bytes = 18): string {

@@ -53,6 +53,10 @@ services:
       # Por defeito usa https://${DOMAIN}, mas pode ser sobreposto no .env
       # (útil para teste local: CORS_ORIGIN=http://localhost)
       CORS_ORIGIN: ${CORS_ORIGIN:-https://${DOMAIN}}
+      # URL pública usada para construir links (ex.: recuperação de senha).
+      # Por defeito segue o CORS_ORIGIN; sobrepõe no .env se diferir do domínio
+      # (ex.: ambiente só-HTTP sem domínio: APP_PUBLIC_URL=http://77.42.28.190).
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-${CORS_ORIGIN:-https://${DOMAIN}}}
       UPLOAD_DIR: /app/uploads
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-8}
     volumes:

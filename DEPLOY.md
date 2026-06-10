@@ -247,6 +247,77 @@ Vai a `https://melvi.exemplo.ao` e faz login com as credenciais do seed:
 
 > 🚨 **MUDA estas senhas imediatamente** após o primeiro login (Perfil → Alterar senha).
 
+### 10. Criar o Super Administrador da plataforma
+
+O **Super Administrador** é o staff da Melvi — está **acima de todos os condomínios e organizações**
+e tem acesso ao módulo **Sistema** (gestão de utilizadores, permissões e papéis).
+
+> 🔐 **Sem senha fixa.** O super admin nunca é criado com palavra-passe hardcoded. Corres o comando
+> abaixo **uma vez**, após o deploy, indicando o email. Se omitires a senha, é gerada uma senha forte
+> e impressa **uma única vez** no terminal — guarda-a de imediato.
+
+```bash
+# Dentro da pasta do projecto, no servidor:
+docker compose exec -e SUPERADMIN_EMAIL=admin@exemplo.pt backend npm run seed:superadmin
+```
+
+Variáveis de ambiente aceites pelo comando:
+
+| Variável | Obrigatória | Default | Notas |
+|---|---|---|---|
+| `SUPERADMIN_EMAIL` | ✅ | — | Email do super admin |
+| `SUPERADMIN_NAME` | — | `Super Administrador` | Nome a apresentar |
+| `SUPERADMIN_PASSWORD` | — | _gerada aleatoriamente_ | Mínimo 8 caracteres. Se omitida, é gerada e impressa uma vez |
+
+O comando é **idempotente**:
+- Se o email **não existir**, cria um novo `SUPER_ADMIN` activo.
+- Se o email **já existir**, garante `role=SUPER_ADMIN` + `isActive=true` (reactiva se necessário),
+  mas **não** altera a palavra-passe existente.
+
+Para definires tu próprio a senha (em vez da gerada):
+```bash
+docker compose exec \
+  -e SUPERADMIN_EMAIL=admin@exemplo.pt \
+  -e SUPERADMIN_PASSWORD='UmaSenhaForte!2026' \
+  backend npm run seed:superadmin
+```
+
+> 🚨 Depois do primeiro acesso, altera a senha em **Perfil → mudar palavra-passe**. Garante sempre que
+> existe **pelo menos um super admin activo** — o sistema bloqueia a remoção/desactivação do último.
+
+---
+
+## 🌐 Deploy só-HTTP por IP (sem domínio / sem SSL)
+
+Se ainda **não tens domínio nem SSL** e acedes pelo IP (ex.: `http://77.42.28.190`), define no `.env`:
+
+```env
+CORS_ORIGIN=http://77.42.28.190
+APP_PUBLIC_URL=http://77.42.28.190
+```
+
+- `CORS_ORIGIN` — origem permitida pelo backend (caso contrário assume `https://${DOMAIN}`).
+- `APP_PUBLIC_URL` — base usada para construir **links absolutos** enviados ao utilizador, como o
+  **link de recuperação de senha**. Se não definido, segue o `CORS_ORIGIN`. Mantém-no igual ao endereço
+  por onde os utilizadores realmente acedem, senão os links de reset apontam para o sítio errado.
+
+Salta os passos 2 (DNS) e 7 (HTTPS) acima. Quando tiveres domínio, remove estas duas linhas do `.env`
+e corre `bash scripts/ssl.sh`.
+
+---
+
+## 🔑 Recuperação de senha (sem email)
+
+O sistema **não envia emails**. A recuperação de senha é feita por um administrador que **gera um link**:
+
+1. O admin (ou super admin) abre **Sistema → Utilizadores**, encontra o utilizador e clica em
+   **"Gerar link de recuperação"**.
+2. É apresentado um link único (válido **60 minutos**, **uso único**). O admin copia-o e entrega-o ao
+   utilizador pelo canal habitual (WhatsApp, presencialmente, etc.).
+3. O utilizador abre o link, escolhe uma nova senha; as sessões anteriores são terminadas.
+
+O link usa o `APP_PUBLIC_URL` como base — por isso é importante que esteja correcto (ver secção acima).
+
 ---
 
 ## 🛠️ Comandos úteis

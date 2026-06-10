@@ -13,13 +13,14 @@ export function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showRecovery, setShowRecovery] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     try {
       const user = await login(email, password);
-      const isAdmin = user.role === "ADMIN" || user.role === "ADMIN_ORG";
+      const isAdmin = user.role === "SUPER_ADMIN" || user.role === "ADMIN" || user.role === "ADMIN_ORG";
       const redirect =
         (location.state as any)?.from?.pathname ||
         (isAdmin ? "/admin" : user.role === "DOORMAN" ? "/doorman" : "/resident");
@@ -34,7 +35,7 @@ export function LoginPage() {
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
       <div className="hidden lg:flex flex-col justify-between bg-gradient-to-br from-brand-900 via-brand-800 to-brand-950 p-12 text-white">
-        <BrandLogo variant="white" className="h-11" />
+        <BrandLogo variant="white" className="h-32" />
         <div>
           <h1 className="font-display text-4xl font-bold leading-tight">
             Gestão completa do seu condomínio numa só plataforma.
@@ -43,13 +44,13 @@ export function LoginPage() {
             Acesso por QR Code, ocorrências, comunicados, alertas de pânico em tempo real, financeiro e muito mais.
           </p>
         </div>
-        <div className="text-xs text-slate-400">© Melvi Condomínio · Demonstração</div>
+        <div className="text-xs text-slate-400">© Melvi Condomínio</div>
       </div>
 
       <div className="flex items-center justify-center p-8">
         <form onSubmit={onSubmit} className="w-full max-w-sm space-y-5">
           <div className="lg:hidden flex items-center justify-center mb-6">
-            <BrandLogo variant="color" className="h-9" />
+            <BrandLogo variant="color" className="h-28" />
           </div>
           <div>
             <h2 className="font-display text-2xl font-bold text-brand-900">Bem-vindo de volta</h2>
@@ -85,12 +86,22 @@ export function LoginPage() {
             {loading ? "A entrar…" : "Entrar"}
           </Button>
 
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-            <div className="font-semibold mb-1 text-slate-700">Credenciais de demonstração:</div>
-            <div>👤 admin@morabeza.ao / Admin@123</div>
-            <div>🏠 residente1@morabeza.ao / Residente@123</div>
-            <div>🛡️ porteiro@morabeza.ao / Porteiro@123</div>
+          <div className="text-center">
+            <button
+              type="button"
+              onClick={() => setShowRecovery((v) => !v)}
+              className="text-sm font-medium text-brand-700 hover:text-brand-900 hover:underline"
+            >
+              Esqueci a senha?
+            </button>
           </div>
+
+          {showRecovery && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+              A recuperação de senha é feita pelo administrador do seu condomínio. Contacte-o para receber um
+              link de redefinição. Se já tiver um link, abra-o para escolher uma nova senha.
+            </div>
+          )}
         </form>
       </div>
     </div>

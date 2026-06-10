@@ -28,6 +28,7 @@ import {
   CalendarClock,
   FolderOpen,
   Vote,
+  ShieldAlert,
 } from "lucide-react";
 import { Sidebar, SidebarEntry } from "./Sidebar";
 import { MobileTopbar } from "./MobileTopbar";
@@ -82,6 +83,12 @@ const entries: SidebarEntry[] = [
       { to: "/admin/meters/generator", label: "Geradores", icon: Cog },
       { to: "/admin/meters/fuel", label: "Gasóleo", icon: Fuel },
     ],
+  },
+  {
+    to: "/admin/system",
+    label: "Sistema",
+    icon: ShieldAlert,
+    permission: "system:read",
   },
   { to: "/admin/settings", label: "Configurações", icon: Settings },
 ];

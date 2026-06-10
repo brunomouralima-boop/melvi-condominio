@@ -12,11 +12,14 @@ import type { Condominium, Role } from "@/types";
 import toast from "react-hot-toast";
 
 const ROLE_LABELS: Record<Role, string> = {
+  SUPER_ADMIN: "Super Administrador",
   ADMIN_ORG: "Admin Organização",
   ADMIN: "Administrador",
   RESIDENT: "Condómino",
   DOORMAN: "Porteiro",
 };
+// SUPER_ADMIN é deliberadamente omitido: a gestão de membros de um condomínio
+// não atribui o papel de plataforma (feito apenas no módulo Sistema).
 const ROLE_OPTIONS: Role[] = ["ADMIN_ORG", "ADMIN", "DOORMAN", "RESIDENT"];
 
 interface Member {

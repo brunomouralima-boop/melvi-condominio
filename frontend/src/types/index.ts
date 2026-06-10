@@ -1,4 +1,4 @@
-export type Role = "ADMIN_ORG" | "ADMIN" | "RESIDENT" | "DOORMAN";
+export type Role = "SUPER_ADMIN" | "ADMIN_ORG" | "ADMIN" | "RESIDENT" | "DOORMAN";
 
 /** Resumo de um condomínio acessível (para o selector multi-tenant) */
 export interface CondoSummary {
@@ -19,6 +19,10 @@ export interface AuthUser {
   condominiums?: CondoSummary[];
   /** Condomínio activo resolvido pelo servidor (header x-condominium-id) */
   activeCondominiumId?: string | null;
+  /** Permissões efectivas resolvidas no back-end (defaults do papel + overlay). */
+  permissions?: string[];
+  /** Atalho do back-end: true quando role === "SUPER_ADMIN". */
+  isSuperAdmin?: boolean;
 }
 
 export interface Condominium {

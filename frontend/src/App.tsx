@@ -7,6 +7,7 @@ import { SocketProvider } from "@/contexts/SocketContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 
 import { LoginPage } from "@/pages/Login";
+import { ResetPasswordPage } from "@/pages/ResetPassword";
 import { PackagesPage } from "@/pages/Packages";
 
 import { AdminLayout } from "@/components/layout/AdminLayout";
@@ -40,6 +41,7 @@ import { AdminCondominiums } from "@/pages/admin/Condominiums";
 import { AdminTowers } from "@/pages/admin/Towers";
 import { AdminFractions } from "@/pages/admin/Fractions";
 import { AdminMeters } from "@/pages/admin/Meters";
+import { AdminSystemUsers } from "@/pages/admin/SystemUsers";
 import { VisitsHistoryPage } from "@/pages/admin/VisitsHistory";
 
 import { ResidentDashboard } from "@/pages/resident/Dashboard";
@@ -66,7 +68,7 @@ function RootRedirect() {
   const { user, loading } = useAuth();
   if (loading) return <div className="grid min-h-screen place-items-center text-slate-400">A carregar…</div>;
   if (!user) return <Navigate to="/login" replace />;
-  const isAdmin = user.role === "ADMIN" || user.role === "ADMIN_ORG";
+  const isAdmin = user.role === "SUPER_ADMIN" || user.role === "ADMIN" || user.role === "ADMIN_ORG";
   return <Navigate to={isAdmin ? "/admin" : user.role === "DOORMAN" ? "/doorman" : "/resident"} replace />;
 }
 
@@ -81,11 +83,12 @@ export default function App() {
             <Routes>
               <Route path="/" element={<RootRedirect />} />
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
 
               <Route
                 path="/admin"
                 element={
-                  <ProtectedRoute roles={["ADMIN", "ADMIN_ORG"]}>
+                  <ProtectedRoute roles={["SUPER_ADMIN", "ADMIN", "ADMIN_ORG"]}>
                     <AdminLayout />
                   </ProtectedRoute>
                 }
@@ -116,6 +119,14 @@ export default function App() {
                 <Route path="maintenance/suppliers" element={<AdminSuppliers />} />
                 <Route path="meters" element={<Navigate to="/admin/meters/water" replace />} />
                 <Route path="meters/:type" element={<AdminMeters />} />
+                <Route
+                  path="system"
+                  element={
+                    <ProtectedRoute permission="system:read">
+                      <AdminSystemUsers />
+                    </ProtectedRoute>
+                  }
+                />
                 <Route path="settings" element={<AdminSettings />} />
               </Route>
 

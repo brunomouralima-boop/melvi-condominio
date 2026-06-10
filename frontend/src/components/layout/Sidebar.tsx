@@ -2,6 +2,7 @@ import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { LogOut, ChevronDown, ChevronRight, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePermission } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { BrandLogo } from "@/components/brand/BrandLogo";
@@ -12,6 +13,8 @@ export interface SidebarItem {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   end?: boolean;
+  /** Esconde a entrada se o utilizador não tiver esta permissão. */
+  permission?: string;
 }
 
 export interface SidebarGroup {
@@ -19,6 +22,8 @@ export interface SidebarGroup {
   icon: React.ComponentType<{ className?: string }>;
   items: SidebarItem[];
   defaultOpen?: boolean;
+  /** Esconde o grupo inteiro se o utilizador não tiver esta permissão. */
+  permission?: string;
 }
 
 export type SidebarEntry = SidebarItem | SidebarGroup;
@@ -39,7 +44,23 @@ interface SidebarProps {
 
 export function Sidebar({ items, title, accent = "default", isOpen = false, onClose }: SidebarProps) {
   const { user, logout } = useAuth();
+  const { can } = usePermission();
   const navigate = useNavigate();
+
+  // Filtra entradas por permissão (apenas UI; o back-end continua a decidir).
+  const visibleItems = items
+    .map((entry) => {
+      if (!isGroup(entry)) return entry;
+      if (entry.permission && !can(entry.permission)) return null;
+      const subItems = entry.items.filter((it) => !it.permission || can(it.permission));
+      if (subItems.length === 0) return null;
+      return { ...entry, items: subItems };
+    })
+    .filter((entry): entry is SidebarEntry => {
+      if (!entry) return false;
+      if (!isGroup(entry)) return !entry.permission || can(entry.permission);
+      return true;
+    });
 
   return (
     <>
@@ -80,7 +101,7 @@ export function Sidebar({ items, title, accent = "default", isOpen = false, onCl
         {/* Selector de condomínio activo (multi-tenant) — auto-esconde se ≤1 */}
         <CondoSwitcher />
         <nav className={cn("flex-1 overflow-y-auto px-3 py-4 space-y-1", accent === "doorman" && "text-base")}>
-          {items.map((entry, idx) =>
+          {visibleItems.map((entry, idx) =>
             isGroup(entry) ? (
               <SidebarGroupItem key={idx} group={entry} accent={accent} />
             ) : (

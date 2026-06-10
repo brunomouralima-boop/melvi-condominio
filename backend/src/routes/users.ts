@@ -8,10 +8,56 @@ import { requirePermission } from "../middleware/permission";
 import { resolveCondominium } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 import { hashPassword } from "../utils/password";
+import { isSuperAdmin } from "../auth/permissions";
+import { isLastActiveSuperAdmin } from "../auth/superAdmin";
 
 const router = Router();
 router.use(authenticate);
 router.use(resolveCondominium);
+
+// ───────────────────────────────────────────────────────────────────────────
+// Protecção do SUPER_ADMIN nas operações de gestão de utilizadores.
+//
+// O catálogo de rotas abaixo é acessível a qualquer administrador de condomínio
+// (authorize(Role.ADMIN) + users:write). Estas regras impedem que um admin que
+// NÃO é super administrador mexa num super admin (ou promova alguém a super
+// admin) e garantem que a plataforma nunca fica sem super admin activo.
+//
+// Devolve uma mensagem de erro (com status) quando a operação deve ser
+// bloqueada, ou `null` quando é permitida.
+// ───────────────────────────────────────────────────────────────────────────
+async function guardSuperAdminMutation(opts: {
+  requesterRole: Role;
+  targetId: string;
+  newRole?: Role; // role a aplicar (em PUT /:id); undefined se não muda
+  willDeactivate?: boolean; // true para desactivar/eliminar
+}): Promise<{ status: number; error: string } | null> {
+  const target = await prisma.user.findUnique({
+    where: { id: opts.targetId },
+    select: { role: true },
+  });
+  if (!target) return null; // inexistência é tratada pela própria operação
+
+  const requesterIsSuper = isSuperAdmin(opts.requesterRole);
+
+  // 1) Só um super admin pode mexer noutro super admin.
+  if (target.role === Role.SUPER_ADMIN && !requesterIsSuper) {
+    return { status: 403, error: "Apenas um super administrador pode gerir outro super administrador." };
+  }
+  // 2) Só um super admin pode promover alguém a super admin.
+  if (opts.newRole === Role.SUPER_ADMIN && !requesterIsSuper) {
+    return { status: 403, error: "Apenas um super administrador pode atribuir o papel de super administrador." };
+  }
+  // 3) Nunca deixar a plataforma sem super admin activo.
+  const demoting = opts.newRole !== undefined && opts.newRole !== Role.SUPER_ADMIN;
+  if ((opts.willDeactivate || demoting) && (await isLastActiveSuperAdmin(opts.targetId))) {
+    return {
+      status: 409,
+      error: "Não é possível remover, desactivar ou despromover o último super administrador activo.",
+    };
+  }
+  return null;
+}
 
 router.get("/", authorize(Role.ADMIN), requirePermission("users:write"), async (req, res) => {
   const { role, search, includeInactive } = req.query as { role?: Role; search?: string; includeInactive?: string };
@@ -101,6 +147,13 @@ const updateUserSchema = z.object({
 
 router.put("/:id", authorize(Role.ADMIN), requirePermission("users:write"), validateBody(updateUserSchema), async (req, res) => {
   const body = req.body as z.infer<typeof updateUserSchema>;
+  const guard = await guardSuperAdminMutation({
+    requesterRole: req.user!.role,
+    targetId: req.params.id,
+    newRole: body.role,
+    willDeactivate: body.isActive === false,
+  });
+  if (guard) return res.status(guard.status).json({ error: guard.error });
   const { unitId, ...data } = body;
   if (unitId !== undefined && data.fractionId === undefined) (data as any).fractionId = unitId;
   const updated = await prisma.user.update({ where: { id: req.params.id }, data });
@@ -110,6 +163,8 @@ router.put("/:id", authorize(Role.ADMIN), requirePermission("users:write"), vali
 
 // Activate user
 router.patch("/:id/activate", authorize(Role.ADMIN), requirePermission("users:write"), async (req, res) => {
+  const guard = await guardSuperAdminMutation({ requesterRole: req.user!.role, targetId: req.params.id });
+  if (guard) return res.status(guard.status).json({ error: guard.error });
   const updated = await prisma.user.update({
     where: { id: req.params.id },
     data: { isActive: true },
@@ -123,6 +178,8 @@ router.patch("/:id/deactivate", authorize(Role.ADMIN), requirePermission("users:
   if (req.params.id === req.user!.sub) {
     return res.status(400).json({ error: "Não pode desactivar o próprio utilizador." });
   }
+  const guard = await guardSuperAdminMutation({ requesterRole: req.user!.role, targetId: req.params.id, willDeactivate: true });
+  if (guard) return res.status(guard.status).json({ error: guard.error });
   await prisma.$transaction([
     prisma.user.update({ where: { id: req.params.id }, data: { isActive: false } }),
     prisma.refreshToken.deleteMany({ where: { userId: req.params.id } }),
@@ -139,6 +196,8 @@ router.delete("/:id", authorize(Role.ADMIN), requirePermission("users:write"), a
   if (req.params.id === req.user!.sub) {
     return res.status(400).json({ error: "Não pode eliminar o próprio utilizador." });
   }
+  const guard = await guardSuperAdminMutation({ requesterRole: req.user!.role, targetId: req.params.id, willDeactivate: true });
+  if (guard) return res.status(guard.status).json({ error: guard.error });
   const ownedActive = await prisma.fraction.count({
     where: { ownerId: req.params.id, isActive: true },
   });
@@ -173,6 +232,8 @@ router.post("/:id/reset-password", authorize(Role.ADMIN), requirePermission("use
   if (!newPassword || newPassword.length < 8) {
     return res.status(400).json({ error: "Password must be at least 8 chars" });
   }
+  const guard = await guardSuperAdminMutation({ requesterRole: req.user!.role, targetId: req.params.id });
+  if (guard) return res.status(guard.status).json({ error: guard.error });
   await prisma.user.update({
     where: { id: req.params.id },
     data: { password: await hashPassword(newPassword) },

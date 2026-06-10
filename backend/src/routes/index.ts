@@ -26,6 +26,7 @@ import packages from "./packages";
 import notifications from "./notifications";
 import documents from "./documents";
 import uploads from "./uploads";
+import system from "./system";
 
 const router = Router();
 
@@ -56,5 +57,6 @@ router.use("/packages", packages);
 router.use("/notifications", notifications);
 router.use("/documents", documents);
 router.use("/uploads", uploads);
+router.use("/system", system);
 
 export default router;

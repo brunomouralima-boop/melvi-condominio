@@ -10,6 +10,8 @@ import { validateBody } from "../middleware/validate";
 import { hashPassword } from "../utils/password";
 import { isSuperAdmin } from "../auth/permissions";
 import { isLastActiveSuperAdmin } from "../auth/superAdmin";
+import { config } from "../config";
+import { generateResetToken, resetTokenExpiry, RESET_TOKEN_TTL_MINUTES } from "../utils/resetToken";
 
 const router = Router();
 router.use(authenticate);
@@ -239,6 +241,40 @@ router.post("/:id/reset-password", authorize(Role.ADMIN), requirePermission("use
     data: { password: await hashPassword(newPassword) },
   });
   res.json({ ok: true });
+});
+
+// Gerar link de recuperação de palavra-passe (admin).
+// Não há infra de email: devolvemos o link com o token em claro UMA vez para o
+// admin partilhar com o utilizador. Guardamos apenas o hash do token.
+router.post("/:id/reset-link", authorize(Role.ADMIN), requirePermission("users:write"), async (req, res) => {
+  const guard = await guardSuperAdminMutation({ requesterRole: req.user!.role, targetId: req.params.id });
+  if (guard) return res.status(guard.status).json({ error: guard.error });
+
+  const user = await prisma.user.findUnique({
+    where: { id: req.params.id },
+    select: { id: true, name: true, email: true, isActive: true, deletedAt: true },
+  });
+  if (!user || user.deletedAt || !user.isActive) {
+    return res.status(404).json({ error: "Utilizador não encontrado ou inactivo" });
+  }
+
+  const { token, tokenHash } = generateResetToken();
+  const expiresAt = resetTokenExpiry();
+
+  // Invalida tokens anteriores ainda não usados (só um link válido de cada vez).
+  await prisma.$transaction([
+    prisma.passwordResetToken.deleteMany({ where: { userId: user.id, usedAt: null } }),
+    prisma.passwordResetToken.create({ data: { userId: user.id, tokenHash, expiresAt } }),
+  ]);
+
+  const resetUrl = `${config.app.publicUrl}/reset-password?token=${token}`;
+  res.status(201).json({
+    resetUrl,
+    token,
+    expiresAt,
+    expiresInMinutes: RESET_TOKEN_TTL_MINUTES,
+    user: { id: user.id, name: user.name, email: user.email },
+  });
 });
 
 // Update own profile

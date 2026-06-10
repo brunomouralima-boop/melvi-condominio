@@ -284,6 +284,7 @@ model User {
   meterReadings       MeterReading[]
   notifications       Notification[]
   refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
   visitsAuthorized      Visit[]      @relation("VisitAuthorizer")
   visitsExitRegistered  Visit[]      @relation("VisitExitRegistrar")
   maintenanceCreated    MaintenanceOrder[] @relation("MaintenanceCreator")
@@ -299,6 +300,25 @@ model RefreshToken {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   createdAt DateTime @default(now())
+}
+
+// Token de recuperação de palavra-passe, gerado por um administrador (não há
+// infra de email): o admin cria o link e partilha-o com o utilizador.
+//
+// Segurança:
+//   - guardamos apenas o HASH (SHA-256) do token, nunca o valor em claro;
+//   - expiração curta (expiresAt);
+//   - uso único (usedAt preenchido após a redefinição).
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique // SHA-256 (hex) do token em claro
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
 }
 
 // Permissão individual atribuída a um utilizador, identificada por uma chave

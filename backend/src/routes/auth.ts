@@ -8,6 +8,7 @@ import { authenticate } from "../middleware/auth";
 import { resolveCondominium } from "../middleware/tenant";
 import { validateBody } from "../middleware/validate";
 import { resolvePermissions, isSuperAdmin, PermissionOverride } from "../auth/permissions";
+import { hashResetToken } from "../utils/resetToken";
 
 const router = Router();
 
@@ -17,6 +18,15 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many auth attempts. Please try again later." },
+});
+
+// Limiter dedicado para os endpoints públicos de recuperação de palavra-passe.
+const resetLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Demasiadas tentativas. Tente novamente mais tarde." },
 });
 
 const loginSchema = z.object({
@@ -140,6 +150,52 @@ router.post("/change-password", authenticate, validateBody(changePasswordSchema)
     where: { id: user.id },
     data: { password: await hashPassword(newPassword) },
   });
+  res.json({ ok: true });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Recuperação de palavra-passe (público) — via link gerado por um admin.
+// O token é validado pelo seu hash; tem de estar não usado e dentro da validade,
+// e o utilizador tem de estar activo.
+// ───────────────────────────────────────────────────────────────────────────
+const validateResetSchema = z.object({ token: z.string().min(10) });
+
+router.post("/reset-password/validate", resetLimiter, validateBody(validateResetSchema), async (req, res) => {
+  const { token } = req.body as z.infer<typeof validateResetSchema>;
+  const row = await prisma.passwordResetToken.findUnique({
+    where: { tokenHash: hashResetToken(token) },
+    include: { user: { select: { name: true, isActive: true, deletedAt: true } } },
+  });
+  if (!row || row.usedAt || row.expiresAt < new Date() || !row.user || !row.user.isActive || row.user.deletedAt) {
+    return res.status(400).json({ valid: false, error: "Token inválido ou expirado" });
+  }
+  res.json({ valid: true, name: row.user.name });
+});
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(10),
+  newPassword: z.string().min(8),
+});
+
+router.post("/reset-password", resetLimiter, validateBody(resetPasswordSchema), async (req, res) => {
+  const { token, newPassword } = req.body as z.infer<typeof resetPasswordSchema>;
+  const row = await prisma.passwordResetToken.findUnique({
+    where: { tokenHash: hashResetToken(token) },
+    include: { user: { select: { id: true, isActive: true, deletedAt: true } } },
+  });
+  if (!row || row.usedAt || row.expiresAt < new Date() || !row.user || !row.user.isActive || row.user.deletedAt) {
+    return res.status(400).json({ error: "Token inválido ou expirado" });
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: row.userId }, data: { password: passwordHash } }),
+    prisma.passwordResetToken.update({ where: { id: row.id }, data: { usedAt: new Date() } }),
+    // invalida outros tokens de reset pendentes do mesmo utilizador
+    prisma.passwordResetToken.deleteMany({ where: { userId: row.userId, usedAt: null } }),
+    // força re-login em todos os dispositivos (revoga refresh tokens)
+    prisma.refreshToken.deleteMany({ where: { userId: row.userId } }),
+  ]);
   res.json({ ok: true });
 });
 

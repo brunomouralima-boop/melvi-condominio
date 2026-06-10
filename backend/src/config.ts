@@ -12,6 +12,15 @@ function required(name: string, fallback?: string): string {
 export const config = {
   env: process.env.NODE_ENV ?? "development",
   port: parseInt(process.env.PORT ?? "4000", 10),
+  app: {
+    // URL pública do frontend (para construir o link de recuperação de senha).
+    // Usa APP_PUBLIC_URL se definido; senão, a primeira origem de CORS; senão,
+    // o dev server do Vite.
+    publicUrl: (
+      process.env.APP_PUBLIC_URL ??
+      (process.env.CORS_ORIGIN ?? "http://localhost:5173").split(",")[0]
+    ).trim().replace(/\/+$/, ""),
+  },
   jwt: {
     accessSecret: required("JWT_ACCESS_SECRET", "dev_access_secret"),
     refreshSecret: required("JWT_REFRESH_SECRET", "dev_refresh_secret"),
